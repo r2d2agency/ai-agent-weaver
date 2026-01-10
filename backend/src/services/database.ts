@@ -22,6 +22,8 @@ export async function initDatabase() {
         messages_count INTEGER DEFAULT 0,
         audio_enabled BOOLEAN DEFAULT true,
         widget_enabled BOOLEAN DEFAULT false,
+        ghost_mode BOOLEAN DEFAULT false,
+        takeover_timeout INTEGER DEFAULT 60,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -34,6 +36,7 @@ export async function initDatabase() {
         phone_number VARCHAR(50) NOT NULL,
         status VARCHAR(50) DEFAULT 'sent',
         is_audio BOOLEAN DEFAULT false,
+        is_from_owner BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -95,6 +98,15 @@ export async function initDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
+      -- Conversation takeover tracking (when owner assumes control)
+      CREATE TABLE IF NOT EXISTS conversation_takeover (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agent_id UUID REFERENCES agents(id) ON DELETE CASCADE NOT NULL,
+        phone_number VARCHAR(50) NOT NULL,
+        taken_over_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(agent_id, phone_number)
+      );
+
       -- Add new columns if they don't exist (for existing databases)
       DO $$ 
       BEGIN 
@@ -104,8 +116,17 @@ export async function initDatabase() {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='widget_enabled') THEN
           ALTER TABLE agents ADD COLUMN widget_enabled BOOLEAN DEFAULT false;
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='ghost_mode') THEN
+          ALTER TABLE agents ADD COLUMN ghost_mode BOOLEAN DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='takeover_timeout') THEN
+          ALTER TABLE agents ADD COLUMN takeover_timeout INTEGER DEFAULT 60;
+        END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='is_audio') THEN
           ALTER TABLE messages ADD COLUMN is_audio BOOLEAN DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='is_from_owner') THEN
+          ALTER TABLE messages ADD COLUMN is_from_owner BOOLEAN DEFAULT false;
         END IF;
       END $$;
     `);

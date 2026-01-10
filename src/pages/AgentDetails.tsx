@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History } from 'lucide-react';
+import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,8 @@ const AgentDetailsPage = () => {
     token: '',
     audioEnabled: true,
     widgetEnabled: false,
+    ghostMode: false,
+    takeoverTimeout: 60,
   });
 
   const [testingInstance, setTestingInstance] = useState(false);
@@ -54,6 +56,8 @@ const AgentDetailsPage = () => {
         token: agentData.token || '',
         audioEnabled: agentData.audio_enabled !== false,
         widgetEnabled: agentData.widget_enabled === true,
+        ghostMode: agentData.ghost_mode === true,
+        takeoverTimeout: agentData.takeover_timeout || 60,
       });
     }
   }, [agentData]);
@@ -88,6 +92,24 @@ const AgentDetailsPage = () => {
     updateAgentMutation.mutate({
       id,
       data: { widgetEnabled: enabled } as any,
+    });
+  };
+
+  const handleToggleGhostMode = (enabled: boolean) => {
+    if (!id) return;
+    setFormData(prev => ({ ...prev, ghostMode: enabled }));
+    updateAgentMutation.mutate({
+      id,
+      data: { ghostMode: enabled } as any,
+    });
+  };
+
+  const handleTakeoverTimeoutChange = (value: number) => {
+    if (!id) return;
+    setFormData(prev => ({ ...prev, takeoverTimeout: value }));
+    updateAgentMutation.mutate({
+      id,
+      data: { takeoverTimeout: value } as any,
     });
   };
 
@@ -422,11 +444,62 @@ const AgentDetailsPage = () => {
             </Button>
           </motion.div>
 
-          {/* Audio Processing Card */}
+          {/* Ghost Mode Card */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.17 }}
+            className="glass-card p-6"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                <Ghost className="w-4 h-4 text-primary" />
+                Modo Fantasma
+              </h3>
+              <Switch
+                checked={formData.ghostMode}
+                onCheckedChange={handleToggleGhostMode}
+              />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              O agente armazena as conversas mas não responde. Útil para coletar histórico antes de ativar.
+            </p>
+          </motion.div>
+
+          {/* Takeover Timeout Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.175 }}
+            className="glass-card p-6"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <UserCheck className="w-4 h-4 text-primary" />
+              <h3 className="font-semibold text-foreground">Takeover (Assumir Controle)</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Quando você responde pelo WhatsApp, o agente pausa por este tempo.
+            </p>
+            <div className="flex items-center gap-3">
+              <Clock className="w-4 h-4 text-muted-foreground" />
+              <Input
+                type="number"
+                min={10}
+                max={3600}
+                value={formData.takeoverTimeout}
+                onChange={(e) => setFormData(prev => ({ ...prev, takeoverTimeout: parseInt(e.target.value) || 60 }))}
+                onBlur={() => handleTakeoverTimeoutChange(formData.takeoverTimeout)}
+                className="w-24 bg-muted border-border"
+              />
+              <span className="text-sm text-muted-foreground">segundos</span>
+            </div>
+          </motion.div>
+
+          {/* Audio Processing Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.18 }}
             className="glass-card p-6"
           >
             <div className="flex items-center justify-between mb-2">
