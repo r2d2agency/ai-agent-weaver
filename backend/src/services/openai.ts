@@ -75,6 +75,7 @@ interface AgentWithConfig extends Agent {
   notification_number?: string;
   transfer_instructions?: string;
   instance_name?: string;
+  required_fields?: { key: string; question: string }[];
 }
 
 interface HistoryMessage {
@@ -107,6 +108,40 @@ interface ResponseWithMedia {
     customerName?: string;
     customerPhone: string;
   };
+  collectedData?: Record<string, string>;
+}
+
+// Get or create contact for storing collected data
+async function getContactCollectedData(phoneNumber: string): Promise<Record<string, string>> {
+  try {
+    const result = await query(
+      `SELECT collected_data FROM contacts WHERE phone_number = $1`,
+      [phoneNumber]
+    );
+    if (result.rows.length > 0 && result.rows[0].collected_data) {
+      return result.rows[0].collected_data;
+    }
+  } catch (error) {
+    console.error('Error fetching contact collected data:', error);
+  }
+  return {};
+}
+
+// Save collected data to contact
+async function saveContactCollectedData(phoneNumber: string, data: Record<string, string>): Promise<void> {
+  try {
+    await query(
+      `INSERT INTO contacts (phone_number, collected_data) 
+       VALUES ($1, $2)
+       ON CONFLICT (phone_number) 
+       DO UPDATE SET 
+         collected_data = contacts.collected_data || $2,
+         updated_at = CURRENT_TIMESTAMP`,
+      [phoneNumber, JSON.stringify(data)]
+    );
+  } catch (error) {
+    console.error('Error saving contact collected data:', error);
+  }
 }
 
 // Get media context for agent prompt
@@ -169,7 +204,7 @@ const notifyHumanTool = {
   type: 'function' as const,
   function: {
     name: 'notify_human',
-    description: 'Notifica um atendente humano via WhatsApp quando você precisa transferir o atendimento ou quando a situação requer intervenção humana. Use quando: o cliente pedir para falar com um humano, quando não conseguir resolver o problema, quando precisar confirmar um pedido/compra, ou quando a situação for complexa demais.',
+    description: 'Notifica um atendente humano via WhatsApp quando você precisa transferir o atendimento ou quando a situação requer intervenção humana. Use quando: o cliente pedir para falar com um humano, quando não conseguir resolver o problema, quando precisar confirmar um pedido/compra, ou quando a situação for complexa demais. IMPORTANTE: Antes de usar esta função, verifique se todas as variáveis obrigatórias foram coletadas.',
     parameters: {
       type: 'object',
       properties: {
@@ -188,9 +223,37 @@ const notifyHumanTool = {
         customer_name: {
           type: 'string',
           description: 'Nome do cliente (se mencionado na conversa)'
+        },
+        collected_data: {
+          type: 'object',
+          description: 'Dados coletados do cliente (as variáveis obrigatórias preenchidas). Ex: { "nome": "João Silva", "cpf": "123.456.789-00" }',
+          additionalProperties: { type: 'string' }
         }
       },
       required: ['reason', 'conversation_history']
+    }
+  }
+};
+
+// Tool for collecting customer information
+const collectInfoTool = {
+  type: 'function' as const,
+  function: {
+    name: 'collect_customer_info',
+    description: 'Registra informações coletadas do cliente durante a conversa. Use sempre que o cliente fornecer dados importantes como nome, CPF, endereço, etc. Isso ajuda a manter um registro organizado.',
+    parameters: {
+      type: 'object',
+      properties: {
+        field_key: {
+          type: 'string',
+          description: 'Chave/nome da variável (ex: "nome", "cpf", "endereco")'
+        },
+        field_value: {
+          type: 'string',
+          description: 'Valor fornecido pelo cliente'
+        }
+      },
+      required: ['field_key', 'field_value']
     }
   }
 };
@@ -256,12 +319,34 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
       .map((msg, i) => `${msg.role === 'user' ? 'Cliente' : 'Agente'}: ${msg.content}`)
       .join('\n');
 
+    // Get collected data for this contact
+    const collectedData = await getContactCollectedData(phoneNumber);
+    const requiredFields = agent.required_fields || [];
+
     // Add notify_human context if notification number is configured
     if (agent.notification_number) {
       // Build custom instructions section
       const customInstructions = agent.transfer_instructions 
         ? `\n\n### Instruções Personalizadas do Negócio:\n${agent.transfer_instructions}\n`
         : '';
+
+      // Build required fields section
+      let requiredFieldsContext = '';
+      if (requiredFields.length > 0) {
+        const fieldsStatus = requiredFields.map(f => {
+          const value = collectedData[f.key];
+          return `- ${f.key}: ${value ? `✓ "${value}"` : `❌ NÃO COLETADO (pergunte: "${f.question}")`}`;
+        }).join('\n');
+
+        const missingFields = requiredFields.filter(f => !collectedData[f.key]);
+        
+        requiredFieldsContext = `\n\n### Variáveis Obrigatórias para Transferência:
+${fieldsStatus}
+
+${missingFields.length > 0 
+  ? `⚠️ ATENÇÃO: Existem ${missingFields.length} variável(eis) NÃO COLETADA(S). Antes de usar notify_human, você DEVE perguntar e coletar essas informações do cliente. Use collect_customer_info para registrar cada dado coletado.`
+  : '✅ Todas as variáveis obrigatórias foram coletadas. Você pode prosseguir com notify_human.'}`;
+      }
 
       systemPrompt += `\n\n## Transferência para Atendente Humano:
 Você tem a capacidade de notificar um atendente humano via WhatsApp quando necessário.
@@ -271,7 +356,11 @@ Use a função "notify_human" quando:
 - Você não conseguir resolver o problema do cliente
 - A situação for complexa e requer análise humana
 - O cliente estiver insatisfeito ou frustrado
-${customInstructions}
+${customInstructions}${requiredFieldsContext}
+
+## Coleta de Informações:
+Use a função "collect_customer_info" sempre que o cliente fornecer dados importantes. Isso mantém um registro organizado e ajuda na transferência.
+
 IMPORTANTE: Ao usar notify_human, forneça:
 - reason: Motivo claro (ex: "Confirmação de pedido", "Transferência solicitada", etc.)
 - conversation_history: Histórico COMPLETO da conversa. Copie TODAS as mensagens abaixo:
@@ -283,7 +372,8 @@ ${historyForSummary}
 Inclua também a mensagem atual do cliente no conversation_history.
 
 - order_details: ${agent.transfer_instructions ? 'SIGA AS INSTRUÇÕES PERSONALIZADAS ACIMA para preencher este campo com as informações relevantes.' : 'Se for um pedido, liste TODOS os detalhes: produtos, quantidades, valores, endereço de entrega, forma de pagamento, observações, etc.'}
-- customer_name: Nome do cliente se mencionado na conversa`;
+- customer_name: Nome do cliente se mencionado na conversa
+- collected_data: Inclua todos os dados coletados do cliente`;
     }
 
     const client = await getAgentOpenAIClient(agent);
@@ -307,6 +397,7 @@ Inclua também a mensagem atual do cliente no conversation_history.
     }
     if (agent.notification_number) {
       availableTools.push(notifyHumanTool);
+      availableTools.push(collectInfoTool);
     }
 
     let response: any;
@@ -490,6 +581,35 @@ Inclua também a mensagem atual do cliente no conversation_history.
           } catch (e) {
             console.error('Error parsing notify_human tool call:', e);
             await createLog(agent.id, 'error', 'Erro ao processar notify_human', { error: String(e) }, phoneNumber, 'whatsapp');
+          }
+        }
+
+        // Handle collect_customer_info tool call
+        if (toolCall.function.name === 'collect_customer_info') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            console.log('=== collect_customer_info Tool Call ===');
+            console.log('Field:', args.field_key, '=', args.field_value);
+
+            // Save the collected data
+            if (args.field_key && args.field_value) {
+              await saveContactCollectedData(phoneNumber, { [args.field_key]: args.field_value });
+              
+              await createLog(
+                agent.id,
+                'tool_call',
+                `Tool: collect_customer_info - ${args.field_key}`,
+                {
+                  fieldKey: args.field_key,
+                  fieldValue: args.field_value,
+                },
+                phoneNumber,
+                'whatsapp'
+              );
+            }
+          } catch (e) {
+            console.error('Error parsing collect_customer_info tool call:', e);
+            await createLog(agent.id, 'error', 'Erro ao processar collect_customer_info', { error: String(e) }, phoneNumber, 'whatsapp');
           }
         }
       }
