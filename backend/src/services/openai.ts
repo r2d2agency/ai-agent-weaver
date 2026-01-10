@@ -92,7 +92,15 @@ async function getMediaContext(agentId: string): Promise<{ context: string; item
     `${i + 1}. [${m.type.toUpperCase()}] "${m.name}" - ${m.description}`
   ).join('\n');
   
-  const context = `\n\n## Galeria de Produtos/Mídia Disponível:\n${mediaList}\n\nQuando o usuário perguntar sobre um produto específico, você pode usar a função send_media para enviar fotos ou vídeos relacionados. Use a descrição para identificar qual mídia corresponde à pergunta do usuário.`;
+  const context = `\n\n## Galeria de Produtos/Mídia Disponível:\n${mediaList}\n\n## REGRAS OBRIGATÓRIAS PARA ENVIO DE MÍDIA:
+1. NUNCA use markdown para imagens (como ![nome](url)). Isso NÃO funciona.
+2. SEMPRE use a função/tool "send_media" quando quiser enviar fotos ou vídeos.
+3. Quando o usuário perguntar sobre um produto, chame a função send_media com o nome da mídia.
+4. Use a descrição para identificar qual mídia corresponde à pergunta do usuário.
+5. Se não encontrar a mídia, informe que não tem imagem disponível.
+
+Exemplo correto: Chamar send_media com media_names: ["PETRO POWER 150"]
+Exemplo ERRADO: Escrever ![PETRO POWER 150](url) no texto`;
   
   return { context, items };
 }
