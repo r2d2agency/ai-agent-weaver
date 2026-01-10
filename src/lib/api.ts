@@ -65,10 +65,24 @@ export const updateAgent = (id: string, data: Partial<{
   webhookUrl: string;
   token: string;
   status: string;
+  evolutionApiUrl: string;
+  evolutionApiKey: string;
 }>) => apiRequest<any>(`/api/agents/${id}`, {
   method: 'PUT',
   body: JSON.stringify(data),
 });
+
+export const testAgentEvolution = (id: string, data: {
+  evolutionApiUrl: string;
+  evolutionApiKey: string;
+  instanceName: string;
+}) => apiRequest<{ success: boolean; connected?: boolean; state?: string; message?: string; error?: string }>(
+  `/api/agents/${id}/test-evolution`,
+  {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }
+);
 
 export const deleteAgent = (id: string) => apiRequest<void>(`/api/agents/${id}`, {
   method: 'DELETE',

@@ -29,9 +29,23 @@ export async function getEvolutionCredentials(): Promise<{ apiUrl: string; apiKe
   return { apiUrl, apiKey };
 }
 
-export async function sendMessage(instanceName: string, phoneNumber: string, message: string) {
+// Get credentials for a specific agent (uses agent-specific if available, otherwise global)
+export async function getAgentEvolutionCredentials(agent: any): Promise<{ apiUrl: string; apiKey: string }> {
+  // If agent has its own Evolution credentials, use those
+  if (agent.evolution_api_url && agent.evolution_api_key) {
+    let apiUrl = agent.evolution_api_url.replace(/\/manager\/?$/, '');
+    return { apiUrl, apiKey: agent.evolution_api_key };
+  }
+  
+  // Otherwise fall back to global credentials
+  return getEvolutionCredentials();
+}
+
+export async function sendMessage(instanceName: string, phoneNumber: string, message: string, agent?: any) {
   try {
-    const { apiUrl, apiKey } = await getEvolutionCredentials();
+    const { apiUrl, apiKey } = agent 
+      ? await getAgentEvolutionCredentials(agent)
+      : await getEvolutionCredentials();
     
     const response = await axios.post(
       `${apiUrl}/message/sendText/${instanceName}`,
@@ -51,6 +65,30 @@ export async function sendMessage(instanceName: string, phoneNumber: string, mes
   } catch (error) {
     console.error('Evolution API error:', error);
     throw error;
+  }
+}
+
+export async function downloadMediaForAgent(instanceName: string, messageId: string, agent: any): Promise<string | null> {
+  try {
+    const { apiUrl, apiKey } = await getAgentEvolutionCredentials(agent);
+    
+    const response = await axios.get(
+      `${apiUrl}/chat/getBase64FromMediaMessage/${instanceName}`,
+      {
+        headers: { 'apikey': apiKey },
+        params: { messageId },
+        timeout: 60000,
+      }
+    );
+
+    if (response.data?.base64) {
+      return response.data.base64;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error downloading media:', error);
+    return null;
   }
 }
 

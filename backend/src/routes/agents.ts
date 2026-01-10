@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { query } from '../services/database.js';
 import { v4 as uuidv4 } from 'uuid';
 import { generateTestResponse } from '../services/openai.js';
+import { testEvolutionConnection, testInstanceConnection } from '../services/evolution.js';
 
 export const agentsRouter = Router();
 
@@ -64,7 +65,7 @@ agentsRouter.put('/:id', async (req, res) => {
       audioEnabled, imageEnabled, documentEnabled, widgetEnabled, ghostMode, takeoverTimeout,
       inactivityEnabled, inactivityTimeout, inactivityMessage,
       operatingHoursEnabled, operatingHoursStart, operatingHoursEnd, operatingHoursTimezone, outOfHoursMessage,
-      openaiApiKey, openaiModel
+      evolutionApiUrl, evolutionApiKey, openaiApiKey, openaiModel
     } = req.body;
     
     const result = await query(
@@ -90,12 +91,14 @@ agentsRouter.put('/:id', async (req, res) => {
            operating_hours_end = COALESCE($19, operating_hours_end),
            operating_hours_timezone = COALESCE($20, operating_hours_timezone),
            out_of_hours_message = COALESCE($21, out_of_hours_message),
-           openai_api_key = COALESCE($22, openai_api_key),
-           openai_model = COALESCE($23, openai_model),
+           evolution_api_url = COALESCE($22, evolution_api_url),
+           evolution_api_key = COALESCE($23, evolution_api_key),
+           openai_api_key = COALESCE($24, openai_api_key),
+           openai_model = COALESCE($25, openai_model),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $24
+       WHERE id = $26
        RETURNING *`,
-      [name, description, prompt, instanceName, webhookUrl, token, status, audioEnabled, imageEnabled, documentEnabled, widgetEnabled, ghostMode, takeoverTimeout, inactivityEnabled, inactivityTimeout, inactivityMessage, operatingHoursEnabled, operatingHoursStart, operatingHoursEnd, operatingHoursTimezone, outOfHoursMessage, openaiApiKey, openaiModel, req.params.id]
+      [name, description, prompt, instanceName, webhookUrl, token, status, audioEnabled, imageEnabled, documentEnabled, widgetEnabled, ghostMode, takeoverTimeout, inactivityEnabled, inactivityTimeout, inactivityMessage, operatingHoursEnabled, operatingHoursStart, operatingHoursEnd, operatingHoursTimezone, outOfHoursMessage, evolutionApiUrl, evolutionApiKey, openaiApiKey, openaiModel, req.params.id]
     );
     
     if (result.rows.length === 0) {
@@ -106,6 +109,70 @@ agentsRouter.put('/:id', async (req, res) => {
   } catch (error) {
     console.error('Error updating agent:', error);
     res.status(500).json({ error: 'Failed to update agent' });
+  }
+});
+
+// Test agent Evolution connection
+agentsRouter.post('/:id/test-evolution', async (req, res) => {
+  try {
+    const { evolutionApiUrl, evolutionApiKey, instanceName } = req.body;
+    
+    if (!evolutionApiUrl || !evolutionApiKey) {
+      return res.status(400).json({ error: 'Evolution API URL and Key are required' });
+    }
+
+    // First test the API connection
+    const apiResult = await testEvolutionConnection(evolutionApiUrl, evolutionApiKey);
+    
+    if (!apiResult.success) {
+      return res.json({ 
+        success: false, 
+        error: apiResult.error || 'Failed to connect to Evolution API'
+      });
+    }
+
+    // If instance name provided, test that specific instance
+    if (instanceName) {
+      // Clean the URL
+      const cleanUrl = evolutionApiUrl.replace(/\/manager\/?$/, '');
+      
+      const axios = (await import('axios')).default;
+      try {
+        const response = await axios.get(
+          `${cleanUrl}/instance/connectionState/${instanceName}`,
+          {
+            headers: { 'apikey': evolutionApiKey },
+            timeout: 10000,
+          }
+        );
+        
+        const state = response.data?.instance?.state || response.data?.state;
+        const connected = state === 'open' || state === 'connected';
+        
+        return res.json({
+          success: true,
+          connected,
+          state,
+          message: connected 
+            ? `Instância "${instanceName}" está conectada ao WhatsApp!` 
+            : `Instância "${instanceName}" encontrada mas não está conectada ao WhatsApp. Estado: ${state}`
+        });
+      } catch (instanceError: any) {
+        return res.json({
+          success: true,
+          connected: false,
+          error: `API conectada, mas instância "${instanceName}" não encontrada ou com erro.`
+        });
+      }
+    }
+
+    return res.json({ 
+      success: true, 
+      message: 'Conexão com Evolution API estabelecida com sucesso!'
+    });
+  } catch (error) {
+    console.error('Error testing Evolution connection:', error);
+    res.status(500).json({ error: 'Failed to test connection' });
   }
 });
 

@@ -1,8 +1,7 @@
 import { Router } from 'express';
 import { query } from '../services/database.js';
 import { generateResponse, transcribeAudio, analyzeImage } from '../services/openai.js';
-import { sendMessage, getEvolutionCredentials } from '../services/evolution.js';
-import axios from 'axios';
+import { sendMessage, downloadMediaForAgent, getAgentEvolutionCredentials } from '../services/evolution.js';
 
 export const webhookRouter = Router();
 
@@ -45,30 +44,6 @@ interface WebhookPayload {
     };
     messageTimestamp: number;
   };
-}
-
-async function downloadMedia(instanceName: string, messageId: string): Promise<string | null> {
-  try {
-    const { apiUrl, apiKey } = await getEvolutionCredentials();
-    
-    const response = await axios.get(
-      `${apiUrl}/chat/getBase64FromMediaMessage/${instanceName}`,
-      {
-        headers: { 'apikey': apiKey },
-        params: { messageId },
-        timeout: 60000,
-      }
-    );
-
-    if (response.data?.base64) {
-      return response.data.base64;
-    }
-    
-    return null;
-  } catch (error) {
-    console.error('Error downloading media:', error);
-    return null;
-  }
 }
 
 webhookRouter.post('/:instanceName', async (req, res) => {
@@ -143,7 +118,7 @@ webhookRouter.post('/:instanceName', async (req, res) => {
       console.log(`Received image message from ${phoneNumber}, attempting to analyze...`);
       
       try {
-        const base64 = await downloadMedia(instanceName, payload.data.key.id);
+        const base64 = await downloadMediaForAgent(instanceName, payload.data.key.id, agent);
         
         if (base64) {
           imageBase64 = base64;
@@ -168,7 +143,7 @@ webhookRouter.post('/:instanceName', async (req, res) => {
       console.log(`Received document from ${phoneNumber}: ${fileName} (${mimeType})`);
       
       try {
-        const base64 = await downloadMedia(instanceName, payload.data.key.id);
+        const base64 = await downloadMediaForAgent(instanceName, payload.data.key.id, agent);
         
         if (base64 && (mimeType.includes('image') || mimeType.includes('pdf'))) {
           if (mimeType.includes('image')) {
@@ -194,7 +169,7 @@ webhookRouter.post('/:instanceName', async (req, res) => {
       console.log(`Received audio message from ${phoneNumber}, attempting to transcribe...`);
       
       try {
-        const base64 = await downloadMedia(instanceName, payload.data.key.id);
+        const base64 = await downloadMediaForAgent(instanceName, payload.data.key.id, agent);
         
         if (base64) {
           const audioBuffer = Buffer.from(base64, 'base64');
@@ -278,7 +253,7 @@ webhookRouter.post('/:instanceName', async (req, res) => {
       const outOfHoursMessage = agent.out_of_hours_message || 'Olá! Nosso horário de atendimento é das 09:00 às 18:00. Deixe sua mensagem que responderemos assim que possível! 🕐';
       
       // Send out of hours message
-      await sendMessage(instanceName, phoneNumber, outOfHoursMessage);
+      await sendMessage(instanceName, phoneNumber, outOfHoursMessage, agent);
       
       // Save the message
       await query(
@@ -355,7 +330,7 @@ webhookRouter.post('/:instanceName', async (req, res) => {
     );
 
     // Send response via Evolution API
-    await sendMessage(instanceName, phoneNumber, aiResponse);
+    await sendMessage(instanceName, phoneNumber, aiResponse, agent);
 
     res.status(200).json({ status: 'ok', messageId: payload.data.key.id, isAudio: isAudioMessage });
   } catch (error) {
