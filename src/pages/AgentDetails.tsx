@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, Images, File, Key, Link2, Upload, Palette, Video, HelpCircle, Volume2, Play, Square } from 'lucide-react';
+import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, Images, File, Key, Link2, Upload, Palette, Video, HelpCircle, Volume2, Play, Square, Bell, Phone } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -60,6 +60,7 @@ const AgentDetailsPage = () => {
     openaiModel: 'gpt-4o',
     audioResponseEnabled: false,
     audioResponseVoice: 'nova',
+    notificationNumber: '',
   });
 
   const [testingEvolution, setTestingEvolution] = useState(false);
@@ -115,6 +116,7 @@ const AgentDetailsPage = () => {
         openaiModel: agentData.openai_model || 'gpt-4o',
         audioResponseEnabled: agentData.audio_response_enabled === true,
         audioResponseVoice: agentData.audio_response_voice || 'nova',
+        notificationNumber: agentData.notification_number || '',
       });
     }
   }, [agentData]);
@@ -283,6 +285,14 @@ const AgentDetailsPage = () => {
     updateAgentMutation.mutate({
       id,
       data: { audioResponseVoice: voice } as any,
+    });
+  };
+
+  const handleNotificationNumberChange = () => {
+    if (!id) return;
+    updateAgentMutation.mutate({
+      id,
+      data: { notificationNumber: formData.notificationNumber || null } as any,
     });
   };
 
@@ -819,6 +829,39 @@ const AgentDetailsPage = () => {
                 className="w-24 bg-muted border-border"
               />
               <span className="text-sm text-muted-foreground">segundos</span>
+            </div>
+          </motion.div>
+
+          {/* Human Notification Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.176 }}
+            className="glass-card p-6"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Bell className="w-4 h-4 text-primary" />
+              <h3 className="font-semibold text-foreground">Notificação para Humano</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Número do WhatsApp que será notificado quando a IA precisar transferir o atendimento para um humano.
+            </p>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <Phone className="w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="5511999999999"
+                  value={formData.notificationNumber}
+                  onChange={(e) => setFormData(prev => ({ ...prev, notificationNumber: e.target.value }))}
+                  onBlur={handleNotificationNumberChange}
+                  className="flex-1 bg-muted border-border"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Formato: código do país + DDD + número (ex: 5511999999999). 
+                A IA pode usar a ferramenta "notify_human" quando precisar de ajuda humana.
+              </p>
             </div>
           </motion.div>
 

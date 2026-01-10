@@ -72,6 +72,8 @@ interface AgentWithConfig extends Agent {
   openai_model?: string;
   audio_response_enabled?: boolean;
   audio_response_voice?: string;
+  notification_number?: string;
+  instance_name?: string;
 }
 
 interface HistoryMessage {
@@ -97,6 +99,12 @@ interface MediaItem {
 interface ResponseWithMedia {
   text: string;
   mediaToSend?: MediaItem[];
+  notifyHuman?: {
+    reason: string;
+    summary: string;
+    customerName?: string;
+    customerPhone: string;
+  };
 }
 
 // Get media context for agent prompt
@@ -154,6 +162,33 @@ const mediaTools = [
   }
 ];
 
+// Tool for notifying a human operator
+const notifyHumanTool = {
+  type: 'function' as const,
+  function: {
+    name: 'notify_human',
+    description: 'Notifica um atendente humano via WhatsApp quando você precisa transferir o atendimento ou quando a situação requer intervenção humana. Use quando: o cliente pedir para falar com um humano, quando não conseguir resolver o problema, ou quando a situação for complexa demais.',
+    parameters: {
+      type: 'object',
+      properties: {
+        reason: {
+          type: 'string',
+          description: 'Motivo da transferência (ex: "Cliente solicitou atendimento humano", "Situação complexa que requer análise manual")'
+        },
+        summary: {
+          type: 'string',
+          description: 'Resumo breve da conversa e do que o cliente precisa'
+        },
+        customer_name: {
+          type: 'string',
+          description: 'Nome do cliente (se mencionado na conversa)'
+        }
+      },
+      required: ['reason', 'summary']
+    }
+  }
+};
+
 export async function generateResponse(
   agent: AgentWithConfig, 
   userMessage: string, 
@@ -210,6 +245,21 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
       systemPrompt += mediaContext;
     }
 
+    // Add notify_human context if notification number is configured
+    if (agent.notification_number) {
+      systemPrompt += `\n\n## Transferência para Atendente Humano:
+Você tem a capacidade de notificar um atendente humano via WhatsApp quando necessário.
+Use a função "notify_human" quando:
+- O cliente pedir explicitamente para falar com um humano
+- Você não conseguir resolver o problema do cliente
+- A situação for complexa e requer análise humana
+- O cliente estiver insatisfeito ou frustrado
+
+Ao usar notify_human, forneça:
+- reason: Motivo claro da transferência
+- summary: Resumo do que o cliente precisa
+- customer_name: Nome do cliente se mencionado na conversa`;
+
     const client = await getAgentOpenAIClient(agent);
     const model = agent.openai_model || process.env.OPENAI_MODEL || 'gpt-4o';
 
@@ -224,6 +274,15 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
       userContent = userMessage;
     }
 
+    // Build tools array based on agent configuration
+    const availableTools: any[] = [];
+    if (mediaItems.length > 0) {
+      availableTools.push(...mediaTools);
+    }
+    if (agent.notification_number) {
+      availableTools.push(notifyHumanTool);
+    }
+
     let response: any;
     try {
       response = await client.chat.completions.create({
@@ -234,8 +293,8 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
           ...history,
           { role: 'user', content: userContent as any },
         ],
-        tools: mediaItems.length > 0 ? mediaTools : undefined,
-        tool_choice: mediaItems.length > 0 ? 'auto' : undefined,
+        tools: availableTools.length > 0 ? availableTools : undefined,
+        tool_choice: availableTools.length > 0 ? 'auto' : undefined,
       });
     } catch (err) {
       // Fallback: if the chosen model/config doesn't support tools or fails, retry without tools
@@ -254,6 +313,7 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
     const message = response.choices[0]?.message;
     let textResponse = message?.content || '';
     let mediaToSend: MediaItem[] = [];
+    let notifyHuman: ResponseWithMedia['notifyHuman'] = undefined;
 
     // Check for tool calls
     console.log('=== OpenAI Response Debug ===');
@@ -361,10 +421,55 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
             await createLog(agent.id, 'error', 'Erro ao processar tool call', { error: String(e) }, phoneNumber, 'whatsapp');
           }
         }
+        
+        // Handle notify_human tool call
+        if (toolCall.function.name === 'notify_human') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            console.log('=== notify_human Tool Call ===');
+            console.log('Reason:', args.reason);
+            console.log('Summary:', args.summary);
+            console.log('Customer name:', args.customer_name);
+
+            notifyHuman = {
+              reason: args.reason || 'Transferência solicitada',
+              summary: args.summary || 'Sem resumo disponível',
+              customerName: args.customer_name,
+              customerPhone: phoneNumber,
+            };
+
+            // Log the tool call
+            await createLog(
+              agent.id,
+              'tool_call',
+              `Tool: notify_human - "${args.reason}"`,
+              {
+                reason: args.reason,
+                summary: args.summary,
+                customerName: args.customer_name,
+                customerPhone: phoneNumber,
+                notificationNumber: agent.notification_number,
+              },
+              phoneNumber,
+              'whatsapp'
+            );
+
+            // Set a friendly message for the customer
+            if (!toolSuggestedMessage) {
+              toolSuggestedMessage = 'Entendido! Estou acionando um atendente humano para te ajudar. Em breve você será atendido. 🙌';
+            }
+          } catch (e) {
+            console.error('Error parsing notify_human tool call:', e);
+            await createLog(agent.id, 'error', 'Erro ao processar notify_human', { error: String(e) }, phoneNumber, 'whatsapp');
+          }
+        }
       }
 
-      // If tool is used, avoid confirming delivery in the past tense.
-      if (mediaToSend.length > 0) {
+      // Handle response based on tool calls
+      if (notifyHuman) {
+        console.log('=== Human notification requested ===');
+        textResponse = toolSuggestedMessage || 'Entendido! Estou acionando um atendente humano para te ajudar. Em breve você será atendido. 🙌';
+      } else if (mediaToSend.length > 0) {
         console.log(`=== Sending ${mediaToSend.length} media items ===`);
         textResponse = toolSuggestedMessage || 'Perfeito — vou te enviar agora.';
         
@@ -380,21 +485,20 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
           phoneNumber,
           'whatsapp'
         );
-      } else {
-        console.log('=== No media matched, sending fallback message ===');
-        textResponse =
-          toolSuggestedMessage ||
-          'Entendi. Não encontrei esse item na minha galeria agora. Você pode me dizer o nome do produto ou mandar mais detalhes/foto?';
+      } else if (toolSuggestedMessage) {
+        // Tool was called but no media matched
+        console.log('=== Tool called but no media matched ===');
+        textResponse = toolSuggestedMessage;
       }
     } else {
       console.log('=== No tool calls - Regular text response ===');
     }
 
-    if (!textResponse && mediaToSend.length === 0) {
+    if (!textResponse && mediaToSend.length === 0 && !notifyHuman) {
       textResponse = 'Desculpe, não consegui gerar uma resposta.';
     }
 
-    return { text: textResponse, mediaToSend };
+    return { text: textResponse, mediaToSend, notifyHuman };
   } catch (error) {
     console.error('OpenAI error:', error);
     throw error;
