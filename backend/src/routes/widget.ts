@@ -25,7 +25,8 @@ widgetRouter.get('/agent/:agentId', async (req, res) => {
     
     const result = await query(
       `SELECT id, name, description, widget_avatar_url, widget_position, widget_title, 
-              widget_primary_color, widget_secondary_color, widget_background_color, widget_text_color 
+              widget_primary_color, widget_secondary_color, widget_background_color, widget_text_color,
+              widget_training_mode, widget_reset_code
        FROM agents WHERE id = $1 AND widget_enabled = true`,
       [agentId]
     );
@@ -227,7 +228,9 @@ widgetRouter.get('/embed/:agentId', async (req, res) => {
     backgroundColor: '#ffffff',
     textColor: '#333333',
     title: 'Assistente',
-    avatarUrl: null
+    avatarUrl: null,
+    trainingMode: false,
+    resetCode: ''
   };
   
   function hexToRgba(hex, alpha) {
@@ -457,11 +460,11 @@ widgetRouter.get('/embed/:agentId', async (req, res) => {
           <div class="wa-widget-message agent">Olá! Como posso ajudar você?</div>
         </div>
         <div class="wa-widget-footer">
-          <div class="wa-widget-training-badge">🧪 Versão de Treinamento</div>
-          <button class="wa-widget-reset" id="wa-widget-reset">
+          \${config.trainingMode ? '<div class="wa-widget-training-badge">🧪 Versão de Treinamento</div>' : ''}
+          \${config.trainingMode ? \`<button class="wa-widget-reset" id="wa-widget-reset">
             <svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
             Limpar Conversa e Resetar
-          </button>
+          </button>\` : ''}
           <div class="wa-widget-input">
             <input type="text" id="wa-widget-input" placeholder="Digite sua mensagem..." />
             <button id="wa-widget-send">
@@ -508,11 +511,23 @@ widgetRouter.get('/embed/:agentId', async (req, res) => {
       sendBtn.disabled = false;
     }
     
-    resetBtn.onclick = function() {
-      if (confirm('Tem certeza que deseja limpar a conversa e resetar o treinamento?')) {
+    if (resetBtn) {
+      resetBtn.onclick = function() {
+        if (confirm('Tem certeza que deseja limpar a conversa e resetar o treinamento?')) {
+          resetConversation();
+        }
+      };
+    }
+    
+    // Check for reset code in message
+    function checkResetCode(text) {
+      if (config.resetCode && text.trim().toLowerCase() === config.resetCode.toLowerCase()) {
         resetConversation();
+        addMessage('✅ Conversa reiniciada com sucesso!', 'agent');
+        return true;
       }
-    };
+      return false;
+    }
     
     function addMessage(text, sender) {
       var div = document.createElement('div');
@@ -539,6 +554,12 @@ widgetRouter.get('/embed/:agentId', async (req, res) => {
     function sendMessage() {
       var text = input.value.trim();
       if (!text || isLoading) return;
+      
+      // Check for reset code first
+      if (checkResetCode(text)) {
+        input.value = '';
+        return;
+      }
       
       isLoading = true;
       input.value = '';
@@ -618,6 +639,8 @@ widgetRouter.get('/embed/:agentId', async (req, res) => {
       if (data.widget_title) config.title = data.widget_title;
       if (data.widget_avatar_url) config.avatarUrl = data.widget_avatar_url;
       if (data.name && !data.widget_title) config.title = data.name;
+      config.trainingMode = data.widget_training_mode === true;
+      config.resetCode = data.widget_reset_code || '';
       
       injectStyles();
       createWidget();

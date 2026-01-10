@@ -67,6 +67,7 @@ agentsRouter.put('/:id', async (req, res) => {
       operatingHoursEnabled, operatingHoursStart, operatingHoursEnd, operatingHoursTimezone, outOfHoursMessage,
       evolutionApiUrl, evolutionApiKey, openaiApiKey, openaiModel,
       widgetAvatarUrl, widgetPosition, widgetTitle, widgetPrimaryColor, widgetSecondaryColor, widgetBackgroundColor, widgetTextColor,
+      widgetTrainingMode, widgetResetCode,
       audioResponseEnabled, audioResponseVoice, notificationNumber, transferInstructions, requiredFields
     } = req.body;
     
@@ -107,13 +108,15 @@ agentsRouter.put('/:id', async (req, res) => {
            widget_secondary_color = COALESCE($30, widget_secondary_color),
            widget_background_color = COALESCE($31, widget_background_color),
            widget_text_color = COALESCE($32, widget_text_color),
-           audio_response_enabled = COALESCE($33, audio_response_enabled),
-           audio_response_voice = COALESCE($34, audio_response_voice),
-           notification_number = COALESCE($35, notification_number),
-           transfer_instructions = COALESCE($36, transfer_instructions),
-           required_fields = COALESCE($37, required_fields),
+           widget_training_mode = COALESCE($33, widget_training_mode),
+           widget_reset_code = COALESCE($34, widget_reset_code),
+           audio_response_enabled = COALESCE($35, audio_response_enabled),
+           audio_response_voice = COALESCE($36, audio_response_voice),
+           notification_number = COALESCE($37, notification_number),
+           transfer_instructions = COALESCE($38, transfer_instructions),
+           required_fields = COALESCE($39, required_fields),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $38
+       WHERE id = $40
        RETURNING *`,
       [
         toNull(name), toNull(description), toNull(prompt), toNull(instanceName), 
@@ -126,6 +129,7 @@ agentsRouter.put('/:id', async (req, res) => {
         toNull(openaiApiKey), toNull(openaiModel), toNull(widgetAvatarUrl), 
         toNull(widgetPosition), toNull(widgetTitle), toNull(widgetPrimaryColor), 
         toNull(widgetSecondaryColor), toNull(widgetBackgroundColor), toNull(widgetTextColor),
+        toNull(widgetTrainingMode), toNull(widgetResetCode),
         toNull(audioResponseEnabled), toNull(audioResponseVoice), toNull(notificationNumber),
         toNull(transferInstructions), requiredFields ? JSON.stringify(requiredFields) : null,
         req.params.id
