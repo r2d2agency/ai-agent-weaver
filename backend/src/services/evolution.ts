@@ -92,18 +92,32 @@ export async function downloadMediaForAgent(instanceName: string, messageId: str
       }
     );
 
-    // Response can have base64 directly or nested
-    if (response.data?.base64) {
-      return response.data.base64;
+    // Normalize base64 across Evolution versions
+    const extractBase64 = (val: any): string | null => {
+      if (!val) return null;
+      if (typeof val === 'string') return val;
+      if (typeof val.base64 === 'string') return val.base64;
+      if (typeof val.data?.base64 === 'string') return val.data.base64;
+      if (typeof val.data === 'string') return val.data;
+      return null;
+    };
+
+    const raw = extractBase64(response.data);
+    if (!raw) {
+      console.log('Media download response structure:', Object.keys(response.data || {}));
+      return null;
     }
-    
-    // Some versions return it differently
-    if (typeof response.data === 'string' && response.data.length > 100) {
-      return response.data;
+
+    let b64 = raw.trim();
+    const marker = 'base64,';
+    const markerIndex = b64.indexOf(marker);
+    if (b64.startsWith('data:') && markerIndex !== -1) {
+      b64 = b64.slice(markerIndex + marker.length);
     }
-    
-    console.log('Media download response structure:', Object.keys(response.data || {}));
-    return null;
+
+    // Remove whitespace/newlines (some gateways split base64 lines)
+    b64 = b64.replace(/\s+/g, '');
+    return b64;
   } catch (error: any) {
     console.error('Error downloading media:', error.response?.data || error.message);
     return null;
