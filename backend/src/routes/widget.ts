@@ -97,12 +97,48 @@ widgetRouter.post('/chat/:agentId', async (req, res) => {
 // Get embed script
 widgetRouter.get('/embed/:agentId', async (req, res) => {
   const { agentId } = req.params;
-  const baseUrl = `${req.protocol}://${req.get('host')}`;
   
   const script = `
 (function() {
   var agentId = "${agentId}";
-  var apiUrl = "${baseUrl}";
+  
+  // Resolve API URL from script src to avoid Mixed Content issues
+  var scripts = document.getElementsByTagName('script');
+  var currentScript = null;
+  for (var i = 0; i < scripts.length; i++) {
+    if (scripts[i].src && scripts[i].src.indexOf('/api/widget/embed/') !== -1) {
+      currentScript = scripts[i];
+      break;
+    }
+  }
+  
+  var apiUrl = '';
+  var customWidth = 380;
+  var customHeight = 520;
+  
+  if (currentScript) {
+    // Extract origin from script src
+    var srcUrl = currentScript.src;
+    var match = srcUrl.match(/^(https?:\\/\\/[^\\/]+)/);
+    if (match) {
+      apiUrl = match[1];
+    }
+    // Read data attributes for dimensions
+    if (currentScript.getAttribute('data-width')) {
+      customWidth = parseInt(currentScript.getAttribute('data-width'), 10) || 380;
+    }
+    if (currentScript.getAttribute('data-height')) {
+      customHeight = parseInt(currentScript.getAttribute('data-height'), 10) || 520;
+    }
+  }
+  
+  // Fallback: if we couldn't detect, use window location with https
+  if (!apiUrl) {
+    console.warn('Widget: Could not detect API URL from script src, using fallback');
+    apiUrl = 'https://' + window.location.host;
+  }
+  
+  console.log('Widget initialized - API:', apiUrl, 'Width:', customWidth, 'Height:', customHeight);
   
   // Config (will be loaded from API)
   var config = {
@@ -153,8 +189,8 @@ widgetRouter.get('/embed/:agentId', async (req, res) => {
         position: fixed;
         bottom: 90px;
         \${posLeft ? 'left: 20px;' : 'right: 20px;'}
-        width: 380px;
-        height: 520px;
+        width: \${customWidth}px;
+        height: \${customHeight}px;
         background: \${config.backgroundColor};
         border-radius: 16px;
         box-shadow: 0 10px 40px rgba(0,0,0,0.2);
@@ -162,6 +198,7 @@ widgetRouter.get('/embed/:agentId', async (req, res) => {
         flex-direction: column;
         z-index: 999999;
         overflow: hidden;
+        max-height: calc(100vh - 120px);
       }
       .wa-widget-container.open { display: flex; }
       
