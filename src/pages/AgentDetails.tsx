@@ -1123,6 +1123,95 @@ const AgentDetailsPage = () => {
                   </div>
                 </div>
 
+                {/* Live Preview */}
+                <div className="space-y-2 pt-4 border-t border-border">
+                  <Label className="text-xs font-semibold">Preview ao Vivo</Label>
+                  <div className="relative bg-muted/50 rounded-lg p-4 min-h-[280px] overflow-hidden">
+                    {/* Mini chat container preview */}
+                    <div 
+                      className="absolute rounded-xl shadow-xl overflow-hidden"
+                      style={{
+                        width: '200px',
+                        height: '240px',
+                        right: formData.widgetPosition === 'right' ? '12px' : 'auto',
+                        left: formData.widgetPosition === 'left' ? '12px' : 'auto',
+                        bottom: '50px',
+                        backgroundColor: formData.widgetBackgroundColor,
+                      }}
+                    >
+                      {/* Header */}
+                      <div 
+                        className="p-3 flex items-center gap-2"
+                        style={{
+                          background: `linear-gradient(135deg, ${formData.widgetPrimaryColor} 0%, ${formData.widgetSecondaryColor} 100%)`,
+                        }}
+                      >
+                        <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center overflow-hidden">
+                          {formData.widgetAvatarUrl ? (
+                            <img src={formData.widgetAvatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                          ) : (
+                            <Bot className="w-4 h-4 text-white" />
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-white text-xs font-semibold truncate">{formData.widgetTitle || 'Assistente'}</p>
+                          <p className="text-white/70 text-[9px]">Online</p>
+                        </div>
+                      </div>
+                      {/* Messages area */}
+                      <div className="p-2 flex-1 bg-gray-100" style={{ height: '140px' }}>
+                        <div 
+                          className="text-[9px] p-2 rounded-lg rounded-bl-sm max-w-[80%] mb-1"
+                          style={{ 
+                            backgroundColor: formData.widgetBackgroundColor,
+                            color: formData.widgetTextColor,
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                          }}
+                        >
+                          Olá! Como posso ajudar?
+                        </div>
+                        <div 
+                          className="text-[9px] p-2 rounded-lg rounded-br-sm max-w-[80%] ml-auto text-white"
+                          style={{ 
+                            background: `linear-gradient(135deg, ${formData.widgetPrimaryColor} 0%, ${formData.widgetSecondaryColor} 100%)`,
+                          }}
+                        >
+                          Quero saber mais!
+                        </div>
+                      </div>
+                      {/* Input area */}
+                      <div className="p-2 border-t flex gap-1" style={{ backgroundColor: formData.widgetBackgroundColor }}>
+                        <div className="flex-1 h-6 rounded-full bg-gray-100 border border-gray-200"></div>
+                        <div 
+                          className="w-6 h-6 rounded-full flex items-center justify-center"
+                          style={{ 
+                            background: `linear-gradient(135deg, ${formData.widgetPrimaryColor} 0%, ${formData.widgetSecondaryColor} 100%)`,
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" className="w-3 h-3 fill-white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Mini floating button preview */}
+                    <div 
+                      className="absolute w-10 h-10 rounded-full flex items-center justify-center shadow-lg overflow-hidden"
+                      style={{
+                        right: formData.widgetPosition === 'right' ? '12px' : 'auto',
+                        left: formData.widgetPosition === 'left' ? '12px' : 'auto',
+                        bottom: '8px',
+                        background: `linear-gradient(135deg, ${formData.widgetPrimaryColor} 0%, ${formData.widgetSecondaryColor} 100%)`,
+                      }}
+                    >
+                      {formData.widgetAvatarUrl ? (
+                        <img src={formData.widgetAvatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                      ) : (
+                        <MessageSquare className="w-5 h-5 text-white" />
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 {/* Save Widget Settings */}
                 <Button
                   onClick={() => {
