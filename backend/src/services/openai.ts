@@ -1,9 +1,18 @@
 import OpenAI from 'openai';
 import { query } from './database.js';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (!openaiClient) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error('OPENAI_API_KEY environment variable is not configured');
+    }
+    openaiClient = new OpenAI({ apiKey });
+  }
+  return openaiClient;
+}
 
 interface Agent {
   id: string;
@@ -41,7 +50,7 @@ export async function generateResponse(agent: Agent, userMessage: string, phoneN
       ? `${agent.prompt}\n\nContexto adicional dos documentos:\n${docsContext}`
       : agent.prompt;
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAIClient().chat.completions.create({
       model: process.env.OPENAI_MODEL || 'gpt-4o',
       max_completion_tokens: 1000,
       messages: [
