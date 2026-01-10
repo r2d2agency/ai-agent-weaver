@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Bot, Upload, Wand2, X, FileText } from 'lucide-react';
+import { Bot, Upload, Wand2, X, FileText, Copy, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,6 +12,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
+
+const BACKEND_URL = 'http://whats-agente-backend.isyhhh.easypanel.host:3000';
 
 interface CreateAgentModalProps {
   open: boolean;
@@ -31,6 +34,8 @@ export interface AgentFormData {
 }
 
 export function CreateAgentModal({ open, onOpenChange, onSubmit, isLoading }: CreateAgentModalProps) {
+  const { toast } = useToast();
+  const [copied, setCopied] = useState(false);
   const [formData, setFormData] = useState<AgentFormData>({
     name: '',
     description: '',
@@ -41,6 +46,11 @@ export function CreateAgentModal({ open, onOpenChange, onSubmit, isLoading }: Cr
     documents: [],
   });
   const [dragActive, setDragActive] = useState(false);
+
+  // Auto-generate webhook URL based on instance name
+  const generatedWebhookUrl = formData.instanceName 
+    ? `${BACKEND_URL}/webhook/${formData.instanceName}`
+    : '';
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -83,9 +93,24 @@ export function CreateAgentModal({ open, onOpenChange, onSubmit, isLoading }: Cr
     }));
   };
 
+  const copyWebhookUrl = () => {
+    if (generatedWebhookUrl) {
+      navigator.clipboard.writeText(generatedWebhookUrl);
+      setCopied(true);
+      toast({
+        title: 'Copiado!',
+        description: 'URL do webhook copiada para a área de transferência.',
+      });
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    onSubmit({
+      ...formData,
+      webhookUrl: generatedWebhookUrl,
+    });
     setFormData({
       name: '',
       description: '',
@@ -124,7 +149,7 @@ export function CreateAgentModal({ open, onOpenChange, onSubmit, isLoading }: Cr
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="instanceName">Nome da Instância</Label>
+              <Label htmlFor="instanceName">Nome da Instância (Evolution API)</Label>
               <Input
                 id="instanceName"
                 placeholder="Ex: minha-instancia"
@@ -135,6 +160,33 @@ export function CreateAgentModal({ open, onOpenChange, onSubmit, isLoading }: Cr
               />
             </div>
           </div>
+
+          {/* Auto-generated Webhook URL */}
+          {formData.instanceName && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="space-y-2"
+            >
+              <Label>URL do Webhook (gerado automaticamente)</Label>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 bg-muted px-3 py-2 rounded-lg text-sm text-primary font-mono truncate border border-primary/20">
+                  {generatedWebhookUrl}
+                </code>
+                <Button 
+                  type="button"
+                  variant="outline" 
+                  size="icon"
+                  onClick={copyWebhookUrl}
+                >
+                  {copied ? <CheckCircle className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Configure esta URL no webhook da sua instância na Evolution API
+              </p>
+            </motion.div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="description">Descrição</Label>
@@ -157,30 +209,6 @@ export function CreateAgentModal({ open, onOpenChange, onSubmit, isLoading }: Cr
               className="bg-muted border-border min-h-[120px]"
               required
             />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="webhookUrl">URL do Webhook</Label>
-              <Input
-                id="webhookUrl"
-                placeholder="https://..."
-                value={formData.webhookUrl}
-                onChange={(e) => setFormData(prev => ({ ...prev, webhookUrl: e.target.value }))}
-                className="bg-muted border-border"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="token">Token de Autenticação</Label>
-              <Input
-                id="token"
-                type="password"
-                placeholder="Token secreto"
-                value={formData.token}
-                onChange={(e) => setFormData(prev => ({ ...prev, token: e.target.value }))}
-                className="bg-muted border-border"
-              />
-            </div>
           </div>
 
           <div className="space-y-2">
