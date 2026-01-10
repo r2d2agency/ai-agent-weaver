@@ -94,6 +94,15 @@ export const getMessages = (agentId?: string) => {
   return apiRequest<any[]>(url);
 };
 
+export const sendManualMessage = (data: {
+  agentId: string;
+  phoneNumber: string;
+  content: string;
+}) => apiRequest<{ success: boolean; message: any }>('/api/messages/send', {
+  method: 'POST',
+  body: JSON.stringify(data),
+});
+
 // Settings
 export const getSettings = () => apiRequest<Record<string, string>>('/api/settings');
 

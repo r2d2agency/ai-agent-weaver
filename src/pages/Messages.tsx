@@ -1,14 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { MessageSquare, Search, Loader2, User, Bot, ChevronRight } from 'lucide-react';
+import { MessageSquare, Search, Loader2, User, Bot, ChevronRight, Send } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useQuery } from '@tanstack/react-query';
-import { getMessages } from '@/lib/api';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getMessages, sendManualMessage } from '@/lib/api';
 import { useAgents } from '@/hooks/use-agents';
+import { useToast } from '@/hooks/use-toast';
 
 interface Message {
   id: string;
@@ -33,10 +35,16 @@ interface Conversation {
 const MessagesPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [messageInput, setMessageInput] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { data: messagesData, isLoading: messagesLoading } = useQuery({
     queryKey: ['messages'],
     queryFn: () => getMessages(),
+    refetchInterval: 5000, // Refresh every 5 seconds
   });
 
   const { data: agentsData } = useAgents();
@@ -121,6 +129,54 @@ const MessagesPage = () => {
 
     return filtered;
   }, [conversationsByAgent, searchTerm]);
+
+  // Update selected conversation when messages refresh
+  useEffect(() => {
+    if (selectedConversation && conversationsByAgent[selectedConversation.agentId]) {
+      const updatedConv = conversationsByAgent[selectedConversation.agentId].conversations[selectedConversation.phoneNumber];
+      if (updatedConv && updatedConv.messages.length !== selectedConversation.messages.length) {
+        setSelectedConversation(updatedConv);
+      }
+    }
+  }, [conversationsByAgent, selectedConversation]);
+
+  // Scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [selectedConversation?.messages.length]);
+
+  const handleSendMessage = async () => {
+    if (!messageInput.trim() || !selectedConversation || isSending) return;
+
+    const content = messageInput.trim();
+    setMessageInput('');
+    setIsSending(true);
+
+    try {
+      await sendManualMessage({
+        agentId: selectedConversation.agentId,
+        phoneNumber: selectedConversation.phoneNumber,
+        content,
+      });
+
+      // Refresh messages
+      queryClient.invalidateQueries({ queryKey: ['messages'] });
+
+      toast({
+        title: 'Mensagem enviada',
+        description: 'A IA será pausada por 60 segundos para esta conversa.',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao enviar',
+        description: error.message || 'Não foi possível enviar a mensagem.',
+        variant: 'destructive',
+      });
+      setMessageInput(content); // Restore message on error
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -301,8 +357,38 @@ const MessagesPage = () => {
                       </div>
                     );
                   })}
+                  <div ref={messagesEndRef} />
                 </div>
               </ScrollArea>
+
+              {/* Message input */}
+              <div className="p-4 border-t border-border bg-card/50">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }}
+                  className="flex gap-2"
+                >
+                  <Input
+                    placeholder="Digite sua mensagem..."
+                    value={messageInput}
+                    onChange={(e) => setMessageInput(e.target.value)}
+                    disabled={isSending}
+                    className="flex-1 bg-background"
+                  />
+                  <Button type="submit" disabled={!messageInput.trim() || isSending}>
+                    {isSending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
+                  </Button>
+                </form>
+                <p className="text-xs text-muted-foreground mt-2">
+                  💡 Ao enviar, a IA será pausada por 60s nesta conversa (takeover)
+                </p>
+              </div>
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center">
