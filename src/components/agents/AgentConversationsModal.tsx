@@ -1,18 +1,29 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { MessageSquare, User, Bot, Search, Phone, Clock, ChevronRight, Loader2 } from 'lucide-react';
+import { MessageSquare, User, Bot, Search, Phone, Clock, ChevronRight, Loader2, Trash2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { API_BASE_URL } from '@/lib/api';
-import { useQuery } from '@tanstack/react-query';
+import { API_BASE_URL, deleteConversation } from '@/lib/api';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 interface Conversation {
   phone_number: string;
@@ -42,6 +53,9 @@ interface AgentConversationsModalProps {
 export function AgentConversationsModal({ open, onOpenChange, agent }: AgentConversationsModalProps) {
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: conversations = [], isLoading: loadingConversations } = useQuery({
     queryKey: ['conversations', agent?.id],
@@ -53,6 +67,30 @@ export function AgentConversationsModal({ open, onOpenChange, agent }: AgentConv
     },
     enabled: !!agent?.id && open,
   });
+
+  const handleDeleteConversation = async () => {
+    if (!agent?.id || !deleteTarget) return;
+    
+    setIsDeleting(true);
+    try {
+      const result = await deleteConversation(agent.id, deleteTarget);
+      toast.success(`Conversa apagada (${result.deletedCount} mensagens)`);
+      
+      // If we're viewing the deleted conversation, go back
+      if (selectedPhone === deleteTarget) {
+        setSelectedPhone(null);
+      }
+      
+      // Refresh the conversations list
+      queryClient.invalidateQueries({ queryKey: ['conversations', agent.id] });
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+      toast.error('Erro ao apagar conversa');
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
+    }
+  };
 
   const { data: conversationData, isLoading: loadingMessages } = useQuery({
     queryKey: ['conversation', agent?.id, selectedPhone],
@@ -147,9 +185,22 @@ export function AgentConversationsModal({ open, onOpenChange, agent }: AgentConv
                         </div>
                         <span className="font-medium text-sm">{formatPhone(conv.phone_number)}</span>
                       </div>
-                      <span className="text-xs text-muted-foreground">
-                        {formatTime(conv.last_message_at)}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {formatTime(conv.last_message_at)}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteTarget(conv.phone_number);
+                          }}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
                     </div>
                     <div className="flex items-center justify-between pl-10">
                       <p className="text-xs text-muted-foreground truncate max-w-[180px]">
@@ -233,6 +284,30 @@ export function AgentConversationsModal({ open, onOpenChange, agent }: AgentConv
           )}
         </div>
       </DialogContent>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apagar conversa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Todas as mensagens desta conversa com {deleteTarget && formatPhone(deleteTarget)} serão permanentemente apagadas.
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConversation}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Apagar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

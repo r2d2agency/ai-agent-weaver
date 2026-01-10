@@ -193,3 +193,10 @@ export const getLogStats = (agentId?: string) => {
   if (agentId) params.append('agent_id', agentId);
   return apiRequest<{ total: number; byType: any[]; recent: any[] }>(`/api/logs/stats?${params.toString()}`);
 };
+
+// Conversations
+export const deleteConversation = (agentId: string, phoneNumber: string) =>
+  apiRequest<{ success: boolean; deletedCount: number }>(
+    `/api/conversations/agent/${agentId}/phone/${encodeURIComponent(phoneNumber)}`,
+    { method: 'DELETE' }
+  );
