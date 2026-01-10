@@ -38,13 +38,12 @@ productsRouter.post('/:agentId', async (req, res) => {
       [agentId, name, description || '', parseFloat(price), category || null, sku || null, stock ?? null, is_active !== false]
     );
 
-    await createLog({
+    await createLog(
       agentId,
-      logType: 'info',
-      action: 'product_created',
-      details: { productName: name, price },
-      source: 'system'
-    });
+      'info',
+      'product_created',
+      { productName: name, price }
+    );
 
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -129,13 +128,12 @@ productsRouter.post('/:agentId/bulk', async (req, res) => {
       inserted.push(result.rows[0]);
     }
 
-    await createLog({
+    await createLog(
       agentId,
-      logType: 'info',
-      action: 'products_bulk_import',
-      details: { count: inserted.length },
-      source: 'system'
-    });
+      'info',
+      'products_bulk_import',
+      { count: inserted.length }
+    );
 
     res.status(201).json({ success: true, count: inserted.length, products: inserted });
   } catch (error) {
