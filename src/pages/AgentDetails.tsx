@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, Images, File, Key, Link2, Upload, Palette, Video, HelpCircle } from 'lucide-react';
+import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, Images, File, Key, Link2, Upload, Palette, Video, HelpCircle, Volume2 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -58,6 +58,8 @@ const AgentDetailsPage = () => {
     outOfHoursMessage: 'Olá! Nosso horário de atendimento é das 09:00 às 18:00. Deixe sua mensagem que responderemos assim que possível! 🕐',
     openaiApiKey: '',
     openaiModel: 'gpt-4o',
+    audioResponseEnabled: false,
+    audioResponseVoice: 'nova',
   });
 
   const [testingEvolution, setTestingEvolution] = useState(false);
@@ -108,6 +110,8 @@ const AgentDetailsPage = () => {
         outOfHoursMessage: agentData.out_of_hours_message || 'Olá! Nosso horário de atendimento é das 09:00 às 18:00. Deixe sua mensagem que responderemos assim que possível! 🕐',
         openaiApiKey: agentData.openai_api_key || '',
         openaiModel: agentData.openai_model || 'gpt-4o',
+        audioResponseEnabled: agentData.audio_response_enabled === true,
+        audioResponseVoice: agentData.audio_response_voice || 'nova',
       });
     }
   }, [agentData]);
@@ -258,6 +262,24 @@ const AgentDetailsPage = () => {
         openaiApiKey: formData.openaiApiKey || null,
         openaiModel: formData.openaiModel,
       } as any,
+    });
+  };
+
+  const handleToggleAudioResponse = (enabled: boolean) => {
+    if (!id) return;
+    setFormData(prev => ({ ...prev, audioResponseEnabled: enabled }));
+    updateAgentMutation.mutate({
+      id,
+      data: { audioResponseEnabled: enabled } as any,
+    });
+  };
+
+  const handleAudioResponseVoiceChange = (voice: string) => {
+    if (!id) return;
+    setFormData(prev => ({ ...prev, audioResponseVoice: voice }));
+    updateAgentMutation.mutate({
+      id,
+      data: { audioResponseVoice: voice } as any,
     });
   };
 
@@ -869,6 +891,58 @@ const AgentDetailsPage = () => {
             <p className="text-sm text-muted-foreground">
               Transcreve mensagens de áudio do WhatsApp automaticamente usando IA.
             </p>
+          </motion.div>
+
+          {/* Audio Response Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.182 }}
+            className="glass-card p-6"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                <Volume2 className="w-4 h-4 text-primary" />
+                Responder em Áudio
+              </h3>
+              <Switch
+                checked={formData.audioResponseEnabled}
+                onCheckedChange={handleToggleAudioResponse}
+              />
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Quando o cliente enviar áudio, o agente responde em áudio. Mensagens de texto continuam como texto.
+            </p>
+            {formData.audioResponseEnabled && (
+              <div className="space-y-3">
+                <Label className="text-xs">Tipo de Voz</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handleAudioResponseVoiceChange('nova')}
+                    className={`p-3 rounded-lg border text-sm font-medium transition-colors ${
+                      formData.audioResponseVoice === 'nova' 
+                        ? 'border-primary bg-primary/10 text-primary' 
+                        : 'border-border bg-muted hover:border-primary/50'
+                    }`}
+                  >
+                    👩 Feminina (Nova)
+                  </button>
+                  <button
+                    onClick={() => handleAudioResponseVoiceChange('onyx')}
+                    className={`p-3 rounded-lg border text-sm font-medium transition-colors ${
+                      formData.audioResponseVoice === 'onyx' 
+                        ? 'border-primary bg-primary/10 text-primary' 
+                        : 'border-border bg-muted hover:border-primary/50'
+                    }`}
+                  >
+                    👨 Masculina (Onyx)
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Usa OpenAI TTS para gerar áudio natural em português.
+                </p>
+              </div>
+            )}
           </motion.div>
 
           {/* Image Processing Card */}
