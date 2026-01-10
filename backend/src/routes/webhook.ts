@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { query } from '../services/database.js';
 import { generateResponse, transcribeAudio, analyzeImage } from '../services/openai.js';
 import { sendMessage, sendMessagesWithDelay, sendMedia, downloadMediaForAgent } from '../services/evolution.js';
+import { createLog } from './logs.js';
 
 export const webhookRouter = Router();
 
@@ -271,6 +272,15 @@ async function processAndRespond(
     // Send media items if any
     if (mediaToSend && mediaToSend.length > 0) {
       console.log(`Sending ${mediaToSend.length} media items to ${phoneNumber}`);
+      
+      await createLog(
+        agent.id,
+        'info',
+        `Iniciando envio de ${mediaToSend.length} mídia(s)`,
+        { mediaNames: mediaToSend.map(m => m.name) },
+        phoneNumber,
+        'whatsapp'
+      );
 
       let mediaSentCount = 0;
       let mediaErrorCount = 0;
@@ -278,12 +288,26 @@ async function processAndRespond(
       for (const media of mediaToSend) {
         try {
           console.log(`Processing media: ${media.name}, type: ${media.type}, urls count: ${media.file_urls?.length || 0}`);
+          
+          await createLog(
+            agent.id,
+            'info',
+            `Processando mídia: ${media.name}`,
+            { 
+              type: media.type, 
+              urlsCount: media.file_urls?.length || 0,
+              mimeTypes: media.mime_types 
+            },
+            phoneNumber,
+            'whatsapp'
+          );
 
           // Small delay between media
           await new Promise(resolve => setTimeout(resolve, 800));
 
           if (!media.file_urls || media.file_urls.length === 0) {
             console.error(`No file URLs for media: ${media.name}`);
+            await createLog(agent.id, 'error', `Sem URLs para mídia: ${media.name}`, {}, phoneNumber, 'whatsapp');
             mediaErrorCount++;
             continue;
           }
@@ -292,39 +316,104 @@ async function processAndRespond(
             const fileUrl = media.file_urls[i];
             const mimeType = media.mime_types?.[i] || 'image/jpeg';
 
-            console.log(`Sending file ${i + 1}/${media.file_urls.length}, mimeType: ${mimeType}, url length: ${fileUrl?.length || 0}`);
+            console.log(`Sending file ${i + 1}/${media.file_urls.length}, mimeType: ${mimeType}, url type: ${typeof fileUrl}, url length: ${fileUrl?.length || 0}`);
 
             if (!fileUrl) {
               console.error(`Empty file URL at index ${i}`);
+              await createLog(agent.id, 'error', `URL vazia no índice ${i}`, {}, phoneNumber, 'whatsapp');
               mediaErrorCount++;
               continue;
             }
 
             // Extract base64 from data URL
             const base64Match = fileUrl.match(/^data:[^;]+;base64,(.+)$/);
+            
             if (base64Match) {
               const base64 = base64Match[1];
               const caption = i === 0 ? media.name : undefined;
 
-              console.log(`Sending base64 media, length: ${base64.length}, caption: ${caption}`);
-              await sendMedia(instanceName, phoneNumber, base64, mimeType, caption, agent);
-              mediaSentCount++;
-              console.log(`Media sent successfully: ${media.name}`);
+              console.log(`Sending base64 media, base64 length: ${base64.length}, caption: ${caption}`);
+              
+              await createLog(
+                agent.id,
+                'info',
+                `Enviando via Evolution API`,
+                { 
+                  base64Length: base64.length, 
+                  mimeType, 
+                  caption,
+                  urlPrefix: fileUrl.substring(0, 50)
+                },
+                phoneNumber,
+                'whatsapp'
+              );
+              
+              try {
+                await sendMedia(instanceName, phoneNumber, base64, mimeType, caption, agent);
+                mediaSentCount++;
+                console.log(`Media sent successfully: ${media.name}`);
+                
+                await createLog(
+                  agent.id,
+                  'media_send',
+                  `Mídia enviada com sucesso: ${media.name}`,
+                  { mimeType, caption },
+                  phoneNumber,
+                  'whatsapp'
+                );
+              } catch (sendErr: any) {
+                console.error(`Evolution API error:`, sendErr.response?.data || sendErr.message);
+                await createLog(
+                  agent.id,
+                  'error',
+                  `Erro Evolution API ao enviar ${media.name}`,
+                  { error: sendErr.response?.data || sendErr.message },
+                  phoneNumber,
+                  'whatsapp'
+                );
+                mediaErrorCount++;
+              }
 
               // Small delay between gallery items
               if (i < media.file_urls.length - 1) {
                 await new Promise(resolve => setTimeout(resolve, 500));
               }
             } else {
-              console.error(`File URL is not a valid data URL: ${fileUrl.substring(0, 50)}...`);
+              console.error(`File URL is not a valid data URL. Type: ${typeof fileUrl}, Preview: ${String(fileUrl).substring(0, 100)}...`);
+              await createLog(
+                agent.id,
+                'error',
+                `URL inválida (não é data URL)`,
+                { urlPreview: String(fileUrl).substring(0, 100), urlType: typeof fileUrl },
+                phoneNumber,
+                'whatsapp'
+              );
               mediaErrorCount++;
             }
           }
-        } catch (mediaError) {
+        } catch (mediaError: any) {
           mediaErrorCount++;
           console.error(`Error sending media ${media.name}:`, mediaError);
+          await createLog(
+            agent.id,
+            'error',
+            `Erro geral ao enviar ${media.name}`,
+            { error: String(mediaError) },
+            phoneNumber,
+            'whatsapp'
+          );
         }
       }
+
+      // Log summary
+      await createLog(
+        agent.id,
+        mediaSentCount > 0 ? 'info' : 'error',
+        `Resumo envio: ${mediaSentCount} sucesso, ${mediaErrorCount} erros`,
+        { sent: mediaSentCount, errors: mediaErrorCount },
+        phoneNumber,
+        'whatsapp'
+      );
 
       // If the AI promised media but we couldn't send anything, notify the user.
       if (mediaErrorCount > 0 && mediaSentCount === 0) {
