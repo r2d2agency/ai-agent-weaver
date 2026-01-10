@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, File, Key } from 'lucide-react';
+import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, File, Key, Link2 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useAgent, useUpdateAgent, useDeleteAgent } from '@/hooks/use-agents';
 import { useToast } from '@/hooks/use-toast';
-import { API_BASE_URL } from '@/lib/api';
+import { API_BASE_URL, testAgentEvolution } from '@/lib/api';
 import { TestAgentModal } from '@/components/agents/TestAgentModal';
 import { AgentDocumentsModal } from '@/components/agents/AgentDocumentsModal';
 import { AgentConversationsModal } from '@/components/agents/AgentConversationsModal';
@@ -29,6 +29,8 @@ const AgentDetailsPage = () => {
     name: '',
     description: '',
     prompt: '',
+    evolutionApiUrl: '',
+    evolutionApiKey: '',
     instanceName: '',
     webhookUrl: '',
     token: '',
@@ -49,12 +51,18 @@ const AgentDetailsPage = () => {
     openaiModel: 'gpt-4o',
   });
 
-  const [testingInstance, setTestingInstance] = useState(false);
-  const [instanceStatus, setInstanceStatus] = useState<'idle' | 'connected' | 'disconnected' | 'error'>('idle');
+  const [testingEvolution, setTestingEvolution] = useState(false);
+  const [evolutionStatus, setEvolutionStatus] = useState<'idle' | 'connected' | 'api_only' | 'disconnected' | 'error'>('idle');
   const [testAgentModalOpen, setTestAgentModalOpen] = useState(false);
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
   const [conversationsModalOpen, setConversationsModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [webhookCopied, setWebhookCopied] = useState(false);
+
+  // Auto-generate webhook URL based on instance name
+  const generatedWebhookUrl = formData.instanceName 
+    ? `${API_BASE_URL}/api/webhook/${formData.instanceName}`
+    : '';
 
   useEffect(() => {
     if (agentData) {
@@ -62,6 +70,8 @@ const AgentDetailsPage = () => {
         name: agentData.name || '',
         description: agentData.description || '',
         prompt: agentData.prompt || '',
+        evolutionApiUrl: agentData.evolution_api_url || '',
+        evolutionApiKey: agentData.evolution_api_key || '',
         instanceName: agentData.instance_name || '',
         webhookUrl: agentData.webhook_url || '',
         token: agentData.token || '',
@@ -92,11 +102,107 @@ const AgentDetailsPage = () => {
         name: formData.name,
         description: formData.description,
         prompt: formData.prompt,
+        evolutionApiUrl: formData.evolutionApiUrl,
+        evolutionApiKey: formData.evolutionApiKey,
         instanceName: formData.instanceName,
-        webhookUrl: formData.webhookUrl,
+        webhookUrl: generatedWebhookUrl,
         token: formData.token,
-      },
+      } as any,
     });
+  };
+
+  const handleSaveEvolution = () => {
+    if (!id) return;
+    updateAgentMutation.mutate({
+      id,
+      data: {
+        evolutionApiUrl: formData.evolutionApiUrl,
+        evolutionApiKey: formData.evolutionApiKey,
+        instanceName: formData.instanceName,
+        webhookUrl: generatedWebhookUrl,
+      } as any,
+    });
+  };
+
+  const copyWebhookUrl = () => {
+    if (generatedWebhookUrl) {
+      navigator.clipboard.writeText(generatedWebhookUrl);
+      setWebhookCopied(true);
+      toast({
+        title: 'Webhook copiado!',
+        description: 'Cole essa URL nas configurações da instância no Evolution.',
+      });
+      setTimeout(() => setWebhookCopied(false), 2000);
+    }
+  };
+
+  const handleTestEvolution = async () => {
+    if (!formData.evolutionApiUrl || !formData.evolutionApiKey) {
+      toast({
+        title: 'Campos obrigatórios',
+        description: 'Informe a URL e API Key da Evolution para testar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setTestingEvolution(true);
+    setEvolutionStatus('idle');
+
+    try {
+      const data = await testAgentEvolution(id || '', {
+        evolutionApiUrl: formData.evolutionApiUrl,
+        evolutionApiKey: formData.evolutionApiKey,
+        instanceName: formData.instanceName,
+      });
+
+      if (data.success) {
+        if (data.connected) {
+          setEvolutionStatus('connected');
+          toast({
+            title: 'Conexão estabelecida!',
+            description: data.message || 'Evolution API e instância conectados.',
+          });
+        } else if (formData.instanceName) {
+          setEvolutionStatus('api_only');
+          toast({
+            title: 'API conectada',
+            description: data.error || data.message || 'Instância não está conectada ao WhatsApp.',
+            variant: 'destructive',
+          });
+        } else {
+          setEvolutionStatus('api_only');
+          toast({
+            title: 'API conectada!',
+            description: 'Agora informe o nome da instância.',
+          });
+        }
+      } else {
+        setEvolutionStatus('error');
+        toast({
+          title: 'Erro na conexão',
+          description: data.error || 'Verifique a URL e API Key.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      setEvolutionStatus('error');
+      toast({
+        title: 'Erro de conexão',
+        description: 'Não foi possível conectar à Evolution API.',
+        variant: 'destructive',
+      });
+    } finally {
+      setTestingEvolution(false);
+    }
+  };
+
+  const getEvolutionStatusIcon = () => {
+    if (evolutionStatus === 'connected') return <CheckCircle className="w-4 h-4 text-success" />;
+    if (evolutionStatus === 'api_only') return <Wifi className="w-4 h-4 text-warning" />;
+    if (evolutionStatus === 'disconnected') return <WifiOff className="w-4 h-4 text-warning" />;
+    if (evolutionStatus === 'error') return <XCircle className="w-4 h-4 text-destructive" />;
+    return null;
   };
 
   const handleToggleAudio = (enabled: boolean) => {
@@ -231,70 +337,6 @@ const AgentDetailsPage = () => {
     });
   };
 
-  const handleTestInstance = async () => {
-    if (!formData.instanceName) {
-      toast({
-        title: 'Nome da instância necessário',
-        description: 'Informe o nome da instância para testar.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setTestingInstance(true);
-    setInstanceStatus('idle');
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/settings/test-instance`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceName: formData.instanceName }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        if (data.connected) {
-          setInstanceStatus('connected');
-          toast({
-            title: 'Instância conectada!',
-            description: `A instância "${formData.instanceName}" está online e pronta.`,
-          });
-        } else {
-          setInstanceStatus('disconnected');
-          toast({
-            title: 'Instância desconectada',
-            description: `A instância existe mas não está conectada ao WhatsApp. Estado: ${data.state}`,
-            variant: 'destructive',
-          });
-        }
-      } else {
-        setInstanceStatus('error');
-        toast({
-          title: 'Erro ao testar instância',
-          description: data.error || 'Verifique as configurações da Evolution API.',
-          variant: 'destructive',
-        });
-      }
-    } catch (error) {
-      setInstanceStatus('error');
-      toast({
-        title: 'Erro de conexão',
-        description: 'Não foi possível conectar à Evolution API.',
-        variant: 'destructive',
-      });
-    } finally {
-      setTestingInstance(false);
-    }
-  };
-
-  const getInstanceStatusIcon = () => {
-    if (instanceStatus === 'connected') return <CheckCircle className="w-4 h-4 text-success" />;
-    if (instanceStatus === 'disconnected') return <WifiOff className="w-4 h-4 text-warning" />;
-    if (instanceStatus === 'error') return <XCircle className="w-4 h-4 text-destructive" />;
-    return null;
-  };
-
   if (isLoading) {
     return (
       <MainLayout>
@@ -347,43 +389,14 @@ const AgentDetailsPage = () => {
             </h2>
 
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nome do Agente</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                    className="bg-muted border-border"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="instanceName" className="flex items-center gap-2">
-                    Nome da Instância
-                    {getInstanceStatusIcon()}
-                  </Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="instanceName"
-                      value={formData.instanceName}
-                      onChange={(e) => setFormData(prev => ({ ...prev, instanceName: e.target.value }))}
-                      className="bg-muted border-border"
-                    />
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={handleTestInstance}
-                      disabled={testingInstance}
-                      title="Testar conexão da instância"
-                    >
-                      {testingInstance ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Wifi className="w-4 h-4" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="name">Nome do Agente</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  className="bg-muted border-border"
+                />
               </div>
 
               <div className="space-y-2">
@@ -405,28 +418,6 @@ const AgentDetailsPage = () => {
                   className="bg-muted border-border min-h-[150px]"
                 />
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="webhookUrl">URL do Webhook</Label>
-                  <Input
-                    id="webhookUrl"
-                    value={formData.webhookUrl}
-                    onChange={(e) => setFormData(prev => ({ ...prev, webhookUrl: e.target.value }))}
-                    className="bg-muted border-border"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="token">Token</Label>
-                  <Input
-                    id="token"
-                    type="password"
-                    value={formData.token}
-                    onChange={(e) => setFormData(prev => ({ ...prev, token: e.target.value }))}
-                    className="bg-muted border-border"
-                  />
-                </div>
-              </div>
             </div>
 
             <div className="flex justify-end mt-6">
@@ -438,6 +429,108 @@ const AgentDetailsPage = () => {
                 <Save className="w-4 h-4 mr-2" />
                 {updateAgentMutation.isPending ? 'Salvando...' : 'Salvar Alterações'}
               </Button>
+            </div>
+          </motion.div>
+
+          {/* Evolution API Configuration */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="glass-card p-6"
+          >
+            <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Link2 className="w-5 h-5 text-primary" />
+              Conexão Evolution API
+              {getEvolutionStatusIcon()}
+            </h2>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="evolutionApiUrl">URL da Evolution API</Label>
+                <Input
+                  id="evolutionApiUrl"
+                  placeholder="https://sua-evolution-api.com"
+                  value={formData.evolutionApiUrl}
+                  onChange={(e) => setFormData(prev => ({ ...prev, evolutionApiUrl: e.target.value }))}
+                  className="bg-muted border-border"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="evolutionApiKey">API Key da Evolution</Label>
+                <Input
+                  id="evolutionApiKey"
+                  type="password"
+                  placeholder="Sua API Key"
+                  value={formData.evolutionApiKey}
+                  onChange={(e) => setFormData(prev => ({ ...prev, evolutionApiKey: e.target.value }))}
+                  className="bg-muted border-border"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="instanceName">Nome da Instância</Label>
+                <Input
+                  id="instanceName"
+                  placeholder="minha-instancia"
+                  value={formData.instanceName}
+                  onChange={(e) => setFormData(prev => ({ ...prev, instanceName: e.target.value }))}
+                  className="bg-muted border-border"
+                />
+              </div>
+
+              {/* Auto-generated Webhook URL */}
+              {generatedWebhookUrl && (
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    Webhook URL
+                    <span className="text-xs text-muted-foreground">(gerado automaticamente)</span>
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      readOnly
+                      value={generatedWebhookUrl}
+                      className="bg-muted border-border font-mono text-sm"
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={copyWebhookUrl}
+                      title="Copiar URL do Webhook"
+                    >
+                      {webhookCopied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Cole esta URL nas configurações da instância na Evolution API.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-3 mt-4">
+                <Button
+                  variant="outline"
+                  onClick={handleTestEvolution}
+                  disabled={testingEvolution}
+                  className="flex-1"
+                >
+                  {testingEvolution ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Wifi className="w-4 h-4 mr-2" />
+                  )}
+                  Testar Conexão
+                </Button>
+                <Button
+                  onClick={handleSaveEvolution}
+                  disabled={updateAgentMutation.isPending}
+                  className="flex-1 btn-primary-gradient"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  Salvar Evolution
+                </Button>
+              </div>
             </div>
           </motion.div>
         </div>

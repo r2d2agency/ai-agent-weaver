@@ -34,6 +34,8 @@ export async function initDatabase() {
         operating_hours_end TIME DEFAULT '18:00',
         operating_hours_timezone VARCHAR(50) DEFAULT 'America/Sao_Paulo',
         out_of_hours_message TEXT DEFAULT 'Olá! Nosso horário de atendimento é das 09:00 às 18:00. Deixe sua mensagem que responderemos assim que possível! 🕐',
+        evolution_api_url VARCHAR(500),
+        evolution_api_key VARCHAR(255),
         openai_api_key VARCHAR(255),
         openai_model VARCHAR(100) DEFAULT 'gpt-4o',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -180,6 +182,12 @@ export async function initDatabase() {
         END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='openai_model') THEN
           ALTER TABLE agents ADD COLUMN openai_model VARCHAR(100) DEFAULT 'gpt-4o';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='evolution_api_url') THEN
+          ALTER TABLE agents ADD COLUMN evolution_api_url VARCHAR(500);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='evolution_api_key') THEN
+          ALTER TABLE agents ADD COLUMN evolution_api_key VARCHAR(255);
         END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='is_audio') THEN
           ALTER TABLE messages ADD COLUMN is_audio BOOLEAN DEFAULT false;
