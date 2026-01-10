@@ -136,6 +136,8 @@ export async function initDatabase() {
         last_user_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         last_agent_message_at TIMESTAMP,
         inactivity_message_sent BOOLEAN DEFAULT false,
+        takeover_active BOOLEAN DEFAULT false,
+        takeover_until TIMESTAMP,
         UNIQUE(agent_id, phone_number)
       );
 
