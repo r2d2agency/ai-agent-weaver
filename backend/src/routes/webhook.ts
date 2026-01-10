@@ -159,6 +159,15 @@ webhookRouter.post('/:instanceName', async (req, res) => {
       [agent.id, messageContent, phoneNumber, isAudioMessage]
     );
 
+    // Update conversation activity for inactivity tracking
+    await query(
+      `INSERT INTO conversation_activity (agent_id, phone_number, last_user_message_at, inactivity_message_sent)
+       VALUES ($1, $2, CURRENT_TIMESTAMP, false)
+       ON CONFLICT (agent_id, phone_number) 
+       DO UPDATE SET last_user_message_at = CURRENT_TIMESTAMP, inactivity_message_sent = false`,
+      [agent.id, phoneNumber]
+    );
+
     // Ghost mode: just store messages, don't respond
     if (ghostMode) {
       await query(
@@ -211,6 +220,14 @@ webhookRouter.post('/:instanceName', async (req, res) => {
       `INSERT INTO messages (agent_id, sender, content, phone_number, status, is_from_owner) 
        VALUES ($1, 'agent', $2, $3, 'sent', false)`,
       [agent.id, aiResponse, phoneNumber]
+    );
+
+    // Update conversation activity with agent response time
+    await query(
+      `UPDATE conversation_activity 
+       SET last_agent_message_at = CURRENT_TIMESTAMP
+       WHERE agent_id = $1 AND phone_number = $2`,
+      [agent.id, phoneNumber]
     );
 
     // Update agent messages count

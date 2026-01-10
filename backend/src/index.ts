@@ -10,6 +10,7 @@ import { widgetRouter } from './routes/widget.js';
 import { documentsRouter } from './routes/documents.js';
 import { conversationsRouter } from './routes/conversations.js';
 import { initDatabase } from './services/database.js';
+import { startInactivityChecker } from './services/inactivity.js';
 
 dotenv.config();
 
@@ -40,6 +41,9 @@ async function start() {
   try {
     await initDatabase();
     console.log('✅ Database initialized');
+    
+    // Start background job for inactivity checking
+    startInactivityChecker();
     
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
