@@ -7,9 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useAgents } from '@/hooks/use-agents';
 import { useNavigate } from 'react-router-dom';
-
-const BACKEND_URL = 'http://whats-agente-backend.isyhhh.easypanel.host:3000';
-
+import { API_BASE_URL } from '@/lib/api';
 const WebhooksPage = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -95,7 +93,7 @@ const WebhooksPage = () => {
       ) : (
         <div className="space-y-4">
           {agents.map((agent: any, index: number) => {
-            const webhookUrl = `${BACKEND_URL}/webhook/${agent.instance_name}`;
+            const webhookUrl = `${API_BASE_URL}/webhook/${agent.instance_name}`;
             
             return (
               <motion.div

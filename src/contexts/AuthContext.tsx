@@ -1,7 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-
-const API_BASE_URL = 'http://whats-agente-backend.isyhhh.easypanel.host:3000';
-
+import { API_BASE_URL } from '@/lib/api';
 interface User {
   id: string;
   email: string;
