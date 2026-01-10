@@ -178,27 +178,40 @@ interface ProductItem {
   id: string;
   name: string;
   description: string;
-  price: number;
+  // NOTE: Postgres DECIMAL/NUMERIC often comes as string (pg driver default)
+  price: number | string;
   category: string | null;
   sku: string | null;
   stock: number | null;
   is_active: boolean;
 }
 
+
 // Get products context for agent prompt
 async function getProductsContext(agentId: string): Promise<{ context: string; items: ProductItem[] }> {
-  const result = await query(
-    `SELECT id, name, description, price, category, sku, stock, is_active 
-     FROM agent_products 
-     WHERE agent_id = $1 AND is_active = true 
-     ORDER BY category, name`,
-    [agentId]
-  );
-  
-  const items = result.rows as ProductItem[];
+  let items: ProductItem[] = [];
+
+  try {
+    const result = await query(
+      `SELECT id, name, description, price, category, sku, stock, is_active 
+       FROM agent_products 
+       WHERE agent_id = $1 AND is_active = true 
+       ORDER BY category, name`,
+      [agentId]
+    );
+
+    items = result.rows as ProductItem[];
+  } catch (error) {
+    // If the table doesn't exist yet (migration not applied) or any DB issue occurs,
+    // don't break the whole AI flow.
+    console.error('Error fetching products context:', error);
+    return { context: '', items: [] };
+  }
+
   if (items.length === 0) {
     return { context: '', items: [] };
   }
+
   
   // Group by category
   const byCategory: Record<string, ProductItem[]> = {};
@@ -213,10 +226,13 @@ async function getProductsContext(agentId: string): Promise<{ context: string; i
     productList += `\n### ${category}:\n`;
     for (const p of products) {
       const stockInfo = p.stock !== null ? ` (Estoque: ${p.stock})` : '';
-      productList += `- "${p.name}" - R$ ${p.price.toFixed(2)}${stockInfo}\n`;
+      const priceNumber = typeof p.price === 'number' ? p.price : parseFloat(String(p.price));
+      const priceLabel = Number.isFinite(priceNumber) ? priceNumber.toFixed(2) : '0.00';
+      productList += `- "${p.name}" - R$ ${priceLabel}${stockInfo}\n`;
       if (p.description) productList += `  Descrição: ${p.description}\n`;
     }
   }
+
   
   const context = `\n\n## 📦 Catálogo de Produtos Disponíveis:\n${productList}
 
@@ -759,15 +775,21 @@ Inclua também a mensagem atual do cliente no conversation_history.
               );
               
               if (product) {
-                const subtotal = product.price * item.quantity;
+                const unitPrice = typeof product.price === 'number' ? product.price : parseFloat(String(product.price));
+                const qty = typeof item.quantity === 'number' ? item.quantity : parseFloat(String(item.quantity));
+                const safeUnitPrice = Number.isFinite(unitPrice) ? unitPrice : 0;
+                const safeQty = Number.isFinite(qty) ? qty : 0;
+
+                const subtotal = safeUnitPrice * safeQty;
                 orderTotal += subtotal;
-                orderDetails.push(`${item.quantity}x ${product.name} = R$ ${subtotal.toFixed(2)}`);
-                console.log(`✓ Product found: ${product.name} x ${item.quantity} = R$ ${subtotal.toFixed(2)}`);
+                orderDetails.push(`${safeQty}x ${product.name} = R$ ${subtotal.toFixed(2)}`);
+                console.log(`✓ Product found: ${product.name} x ${safeQty} = R$ ${subtotal.toFixed(2)}`);
               } else {
                 notFoundItems.push(item.name);
                 console.log(`✗ Product not found: ${item.name}`);
               }
             }
+
 
             // Build order summary message
             let orderSummary = '📋 *Resumo do Pedido*\n\n';
@@ -850,7 +872,7 @@ export async function generateTestResponse(agent: AgentWithConfig, userMessage: 
       `SELECT content FROM documents WHERE agent_id = $1`,
       [agent.id]
     );
-    
+
     const docsContext = docsResult.rows
       .map((doc: any) => doc.content)
       .filter(Boolean)
@@ -859,16 +881,23 @@ export async function generateTestResponse(agent: AgentWithConfig, userMessage: 
     // Get media context
     const { context: mediaContext, items: mediaItems } = await getMediaContext(agent.id);
 
+    // Get products context (catalog)
+    const { context: productsContext, items: productItems } = await getProductsContext(agent.id);
+
     // Add date/time context to test responses too
     const dateTimeContext = getDateTimeContext();
     let systemPrompt = agent.prompt + dateTimeContext;
-    
+
     if (docsContext) {
       systemPrompt += `\n\nContexto adicional dos documentos:\n${docsContext}`;
     }
-    
+
     if (mediaContext) {
       systemPrompt += mediaContext;
+    }
+
+    if (productsContext) {
+      systemPrompt += productsContext;
     }
 
     // Build conversation history summary for notify_human
@@ -879,7 +908,7 @@ export async function generateTestResponse(agent: AgentWithConfig, userMessage: 
     // Add notify_human context if notification number is configured
     if (agent.notification_number) {
       // Build custom instructions section
-      const customInstructions = agent.transfer_instructions 
+      const customInstructions = agent.transfer_instructions
         ? `\n\n### Instruções Personalizadas do Negócio:\n${agent.transfer_instructions}\n`
         : '';
 
@@ -908,11 +937,14 @@ Inclua também a mensagem atual do cliente no conversation_history.
 
     const client = await getAgentOpenAIClient(agent);
     const model = agent.openai_model || process.env.OPENAI_MODEL || 'gpt-4o';
-    
+
     // Build tools array based on agent configuration
     const availableTools: any[] = [];
     if (mediaItems.length > 0) {
       availableTools.push(...mediaTools);
+    }
+    if (productItems.length > 0) {
+      availableTools.push(calculateOrderTool);
     }
     if (agent.notification_number) {
       availableTools.push(notifyHumanTool);
@@ -956,7 +988,7 @@ Inclua também a mensagem atual do cliente no conversation_history.
             const args = JSON.parse(toolCall.function.arguments);
             const mediaNames: string[] = args.media_names || [];
             const additionalMessage: string = args.message || '';
-            
+
             // Find matching media items
             const matchedMedia: string[] = [];
             for (const name of mediaNames) {
@@ -969,7 +1001,7 @@ Inclua também a mensagem atual do cliente no conversation_history.
                 matchedMedia.push(found.name);
               }
             }
-            
+
             if (matchedMedia.length > 0) {
               textResponse = additionalMessage || `[Enviando mídia: ${matchedMedia.join(', ')}]`;
             } else {
@@ -979,22 +1011,65 @@ Inclua também a mensagem atual do cliente no conversation_history.
             console.error('Error parsing send_media tool call:', e);
           }
         }
-        
+
+        if (toolCall.function.name === 'calculate_order') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const orderItems: { name: string; quantity: number }[] = args.items || [];
+            let orderTotal = 0;
+            const orderDetails: string[] = [];
+            const notFoundItems: string[] = [];
+
+            for (const item of orderItems) {
+              const product = productItems.find(
+                p =>
+                  p.name.toLowerCase() === String(item.name).toLowerCase() ||
+                  p.name.toLowerCase().includes(String(item.name).toLowerCase()) ||
+                  String(item.name).toLowerCase().includes(p.name.toLowerCase())
+              );
+
+              if (product) {
+                const unitPrice = typeof product.price === 'number' ? product.price : parseFloat(String(product.price));
+                const qty = typeof item.quantity === 'number' ? item.quantity : parseFloat(String(item.quantity));
+                const safeUnitPrice = Number.isFinite(unitPrice) ? unitPrice : 0;
+                const safeQty = Number.isFinite(qty) ? qty : 0;
+
+                const subtotal = safeUnitPrice * safeQty;
+                orderTotal += subtotal;
+                orderDetails.push(`${safeQty}x ${product.name} = R$ ${subtotal.toFixed(2)}`);
+              } else {
+                notFoundItems.push(String(item.name));
+              }
+            }
+
+            let orderSummary = '📋 Resumo do Pedido\n\n';
+            orderSummary += orderDetails.join('\n');
+            orderSummary += `\n\n💰 Total: R$ ${orderTotal.toFixed(2)}`;
+            if (notFoundItems.length > 0) {
+              orderSummary += `\n\n⚠️ Produtos não encontrados: ${notFoundItems.join(', ')}`;
+            }
+
+            textResponse = orderSummary;
+          } catch (e) {
+            console.error('Error parsing calculate_order tool call (test):', e);
+          }
+        }
+
         if (toolCall.function.name === 'notify_human') {
           try {
             const args = JSON.parse(toolCall.function.arguments);
             let responseText = `🔔 **Transferência para Humano Solicitada**\n\n**Motivo:** ${args.reason}`;
-            
+
             if (args.order_details) {
               responseText += `\n\n🛒 **Detalhes do Pedido:**\n${args.order_details}`;
             }
-            
+
             responseText += `\n\n💬 **Histórico:**\n${args.conversation_history?.substring(0, 500) || 'Sem histórico'}`;
-            
+
             if (args.customer_name) {
               responseText += `\n\n**Nome do cliente:** ${args.customer_name}`;
             }
-            
+
             textResponse = responseText;
           } catch (e) {
             console.error('Error parsing notify_human tool call:', e);
@@ -1010,6 +1085,7 @@ Inclua também a mensagem atual do cliente no conversation_history.
     throw error;
   }
 }
+
 
 // Transcribe audio to text using Whisper
 export async function transcribeAudio(
