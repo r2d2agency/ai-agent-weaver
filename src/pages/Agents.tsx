@@ -74,20 +74,20 @@ const AgentsPage = () => {
         subtitle="Gerencie seus agentes de IA para WhatsApp"
       />
 
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="sm" className="border-primary text-primary">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto pb-2 sm:pb-0">
+          <Button variant="outline" size="sm" className="border-primary text-primary flex-shrink-0">
             Todos ({agents.length})
           </Button>
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" className="flex-shrink-0">
             Online ({agents.filter(a => a.status === 'online').length})
           </Button>
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" className="flex-shrink-0">
             Offline ({agents.filter(a => a.status === 'offline').length})
           </Button>
         </div>
         <Button 
-          className="btn-primary-gradient"
+          className="btn-primary-gradient w-full sm:w-auto"
           onClick={() => setCreateModalOpen(true)}
         >
           <Plus className="w-4 h-4 mr-2" />

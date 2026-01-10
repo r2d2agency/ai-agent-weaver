@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { MessageSquare, Search, Loader2, User, Bot, ChevronRight, Send } from 'lucide-react';
+import { MessageSquare, Search, Loader2, User, Bot, ChevronRight, Send, ArrowLeft } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Input } from '@/components/ui/input';
@@ -210,10 +210,10 @@ const MessagesPage = () => {
     <MainLayout>
       <Header title="Mensagens" subtitle="Histórico de conversas dos seus agentes" />
 
-      <div className="flex gap-6 h-[calc(100vh-200px)]">
+      <div className="flex gap-4 lg:gap-6 h-[calc(100vh-220px)] lg:h-[calc(100vh-200px)]">
         {/* Left sidebar - Agents and Conversations */}
-        <div className="w-80 flex flex-col glass-card overflow-hidden">
-          <div className="p-4 border-b border-border">
+        <div className={`${selectedConversation ? 'hidden lg:flex' : 'flex'} w-full lg:w-80 flex-col glass-card overflow-hidden`}>
+          <div className="p-3 lg:p-4 border-b border-border">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -234,11 +234,11 @@ const MessagesPage = () => {
             ) : (
               Object.entries(filteredAgents).map(([agentId, agentData]) => (
                 <div key={agentId} className="border-b border-border last:border-b-0">
-                  <div className="px-4 py-3 bg-accent/30 sticky top-0">
+                  <div className="px-3 lg:px-4 py-2 lg:py-3 bg-accent/30 sticky top-0">
                     <div className="flex items-center gap-2">
                       <Bot className="w-4 h-4 text-primary" />
-                      <span className="font-medium text-sm">{agentData.agentName}</span>
-                      <Badge variant="secondary" className="ml-auto text-xs">
+                      <span className="font-medium text-sm truncate">{agentData.agentName}</span>
+                      <Badge variant="secondary" className="ml-auto text-xs flex-shrink-0">
                         {Object.keys(agentData.conversations).length}
                       </Badge>
                     </div>
@@ -251,7 +251,7 @@ const MessagesPage = () => {
                         key={`${agentId}-${conv.phoneNumber}`}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className={`p-4 cursor-pointer transition-colors hover:bg-accent/50 border-l-2 ${
+                        className={`p-3 lg:p-4 cursor-pointer transition-colors hover:bg-accent/50 border-l-2 ${
                           selectedConversation?.phoneNumber === conv.phoneNumber &&
                           selectedConversation?.agentId === conv.agentId
                             ? 'bg-accent/50 border-l-primary'
@@ -283,18 +283,27 @@ const MessagesPage = () => {
         </div>
 
         {/* Right side - Chat view */}
-        <div className="flex-1 glass-card overflow-hidden flex flex-col">
+        <div className={`${selectedConversation ? 'flex' : 'hidden lg:flex'} flex-1 glass-card overflow-hidden flex-col`}>
           {selectedConversation ? (
             <>
               {/* Chat header */}
-              <div className="p-4 border-b border-border bg-card/50">
+              <div className="p-3 lg:p-4 border-b border-border bg-card/50">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-info/20 flex items-center justify-center">
+                  {/* Mobile back button */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="lg:hidden flex-shrink-0"
+                    onClick={() => setSelectedConversation(null)}
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                  </Button>
+                  <div className="w-10 h-10 rounded-full bg-info/20 flex items-center justify-center flex-shrink-0">
                     <User className="w-5 h-5 text-info" />
                   </div>
-                  <div>
-                    <h3 className="font-medium">{selectedConversation.phoneNumber}</h3>
-                    <p className="text-xs text-muted-foreground">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-medium truncate">{selectedConversation.phoneNumber}</h3>
+                    <p className="text-xs text-muted-foreground truncate">
                       via {selectedConversation.agentName} • {selectedConversation.messages.length} mensagens
                     </p>
                   </div>
@@ -332,7 +341,7 @@ const MessagesPage = () => {
                           className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}
                         >
                           <div
-                            className={`max-w-[70%] rounded-2xl px-4 py-2 ${
+                            className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-3 sm:px-4 py-2 ${
                               isUser
                                 ? 'bg-accent text-foreground rounded-bl-md'
                                 : isOwner
@@ -362,7 +371,7 @@ const MessagesPage = () => {
               </ScrollArea>
 
               {/* Message input */}
-              <div className="p-4 border-t border-border bg-card/50">
+              <div className="p-3 lg:p-4 border-t border-border bg-card/50">
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -377,7 +386,7 @@ const MessagesPage = () => {
                     disabled={isSending}
                     className="flex-1 bg-background"
                   />
-                  <Button type="submit" disabled={!messageInput.trim() || isSending}>
+                  <Button type="submit" disabled={!messageInput.trim() || isSending} className="flex-shrink-0">
                     {isSending ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
@@ -385,7 +394,7 @@ const MessagesPage = () => {
                     )}
                   </Button>
                 </form>
-                <p className="text-xs text-muted-foreground mt-2">
+                <p className="text-xs text-muted-foreground mt-2 hidden sm:block">
                   💡 Ao enviar, a IA será pausada por 60s nesta conversa (takeover)
                 </p>
               </div>
