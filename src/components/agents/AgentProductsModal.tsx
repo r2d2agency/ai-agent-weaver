@@ -95,7 +95,7 @@ export function AgentProductsModal({ open, onOpenChange, agentId, agentName }: A
     setFormData({
       name: product.name,
       description: product.description || '',
-      price: product.price.toString(),
+      price: String(product.price),
       category: product.category || '',
       sku: product.sku || '',
       stock: product.stock?.toString() || '',
@@ -307,7 +307,7 @@ export function AgentProductsModal({ open, onOpenChange, agentId, agentName }: A
                             </div>
                           </TableCell>
                           <TableCell className="font-medium">
-                            R$ {product.price.toFixed(2)}
+                            R$ {Number(product.price).toFixed(2)}
                           </TableCell>
                           <TableCell>
                             {product.stock !== null ? product.stock : '-'}
