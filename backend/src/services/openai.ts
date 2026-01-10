@@ -680,9 +680,13 @@ export async function generateWidgetResponse(agent: AgentWithConfig, userMessage
       .filter(Boolean)
       .join('\n\n');
 
+    // Add date/time context to widget responses
+    const dateTimeContext = getDateTimeContext();
+    const basePrompt = agent.prompt + dateTimeContext;
+
     const systemPrompt = docsContext 
-      ? `${agent.prompt}\n\nContexto adicional dos documentos:\n${docsContext}`
-      : agent.prompt;
+      ? `${basePrompt}\n\nContexto adicional dos documentos:\n${docsContext}`
+      : basePrompt;
 
     const client = await getAgentOpenAIClient(agent);
     const model = agent.openai_model || process.env.OPENAI_MODEL || 'gpt-4o';
