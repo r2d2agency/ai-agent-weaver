@@ -6,20 +6,26 @@ import {
   Settings, 
   LayoutDashboard,
   Webhook,
-  FileText
+  FileText,
+  Users,
+  LogOut
 } from 'lucide-react';
-
-const menuItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-  { icon: Bot, label: 'Agentes', path: '/agents' },
-  { icon: MessageSquare, label: 'Mensagens', path: '/messages' },
-  { icon: Webhook, label: 'Webhooks', path: '/webhooks' },
-  { icon: FileText, label: 'Documentos', path: '/documents' },
-  { icon: Settings, label: 'Configurações', path: '/settings' },
-];
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
 
 export function Sidebar() {
   const location = useLocation();
+  const { user, isAdmin, logout } = useAuth();
+
+  const menuItems = [
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+    { icon: Bot, label: 'Agentes', path: '/agents' },
+    { icon: MessageSquare, label: 'Mensagens', path: '/messages' },
+    { icon: Webhook, label: 'Webhooks', path: '/webhooks' },
+    { icon: FileText, label: 'Documentos', path: '/documents' },
+    { icon: Settings, label: 'Configurações', path: '/settings' },
+    ...(isAdmin ? [{ icon: Users, label: 'Usuários', path: '/users' }] : []),
+  ];
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
@@ -59,16 +65,31 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="p-4 border-t border-sidebar-border">
-        <div className="glass-card p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-2 h-2 rounded-full status-online" />
-            <span className="text-sm font-medium text-foreground">Sistema Online</span>
+      <div className="p-4 border-t border-sidebar-border space-y-4">
+        {user && (
+          <div className="glass-card p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                <span className="text-sm font-semibold text-primary">
+                  {user.name.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">{user.name}</p>
+                <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+              </div>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="w-full"
+              onClick={logout}
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sair
+            </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Evolution API conectada
-          </p>
-        </div>
+        )}
       </div>
     </aside>
   );

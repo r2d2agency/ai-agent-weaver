@@ -5,6 +5,7 @@ import { webhookRouter } from './routes/webhook.js';
 import { agentsRouter } from './routes/agents.js';
 import { messagesRouter } from './routes/messages.js';
 import { settingsRouter } from './routes/settings.js';
+import { authRouter } from './routes/auth.js';
 import { initDatabase } from './services/database.js';
 
 dotenv.config();
@@ -26,6 +27,7 @@ app.use('/webhook', webhookRouter);
 app.use('/api/agents', agentsRouter);
 app.use('/api/messages', messagesRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/auth', authRouter);
 
 // Initialize database and start server
 async function start() {
