@@ -486,16 +486,27 @@ async function processAndRespond(
       try {
         const notificationNumber = agent.notification_number.replace(/\D/g, '');
         
-        // Build notification message
-        const notificationMessage = `🚨 *Transferência de Atendimento*
+        // Build notification message with full history and order details
+        let notificationMessage = `🚨 *Transferência de Atendimento*
 
 📞 *Cliente:* ${notifyHuman.customerName || 'Não informado'}
 📱 *Telefone:* ${notifyHuman.customerPhone}
 
-📋 *Motivo:* ${notifyHuman.reason}
+📋 *Motivo:* ${notifyHuman.reason}`;
 
-💬 *Resumo da conversa:*
-${notifyHuman.summary}
+        // Add order details if present
+        if (notifyHuman.orderDetails) {
+          notificationMessage += `
+
+🛒 *Detalhes do Pedido:*
+${notifyHuman.orderDetails}`;
+        }
+
+        // Add conversation history
+        notificationMessage += `
+
+💬 *Histórico da Conversa:*
+${notifyHuman.conversationHistory}
 
 _Enviado pelo agente: ${agent.name}_`;
 

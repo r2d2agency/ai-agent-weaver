@@ -101,7 +101,8 @@ interface ResponseWithMedia {
   mediaToSend?: MediaItem[];
   notifyHuman?: {
     reason: string;
-    summary: string;
+    conversationHistory: string;
+    orderDetails?: string;
     customerName?: string;
     customerPhone: string;
   };
@@ -167,24 +168,28 @@ const notifyHumanTool = {
   type: 'function' as const,
   function: {
     name: 'notify_human',
-    description: 'Notifica um atendente humano via WhatsApp quando você precisa transferir o atendimento ou quando a situação requer intervenção humana. Use quando: o cliente pedir para falar com um humano, quando não conseguir resolver o problema, ou quando a situação for complexa demais.',
+    description: 'Notifica um atendente humano via WhatsApp quando você precisa transferir o atendimento ou quando a situação requer intervenção humana. Use quando: o cliente pedir para falar com um humano, quando não conseguir resolver o problema, quando precisar confirmar um pedido/compra, ou quando a situação for complexa demais.',
     parameters: {
       type: 'object',
       properties: {
         reason: {
           type: 'string',
-          description: 'Motivo da transferência (ex: "Cliente solicitou atendimento humano", "Situação complexa que requer análise manual")'
+          description: 'Motivo da transferência (ex: "Cliente solicitou atendimento humano", "Confirmação de pedido", "Situação complexa que requer análise manual")'
         },
-        summary: {
+        conversation_history: {
           type: 'string',
-          description: 'Resumo breve da conversa e do que o cliente precisa'
+          description: 'Histórico COMPLETO da conversa formatado como: "Cliente: mensagem\\nAgente: resposta\\n..." - inclua TODAS as mensagens trocadas'
+        },
+        order_details: {
+          type: 'string',
+          description: 'Detalhes do pedido/compra se aplicável (produtos, quantidades, valores, endereço, forma de pagamento, etc.)'
         },
         customer_name: {
           type: 'string',
           description: 'Nome do cliente (se mencionado na conversa)'
         }
       },
-      required: ['reason', 'summary']
+      required: ['reason', 'conversation_history']
     }
   }
 };
@@ -256,18 +261,22 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
 Você tem a capacidade de notificar um atendente humano via WhatsApp quando necessário.
 Use a função "notify_human" quando:
 - O cliente pedir explicitamente para falar com um humano
+- O cliente confirmar um pedido/compra
 - Você não conseguir resolver o problema do cliente
 - A situação for complexa e requer análise humana
 - O cliente estiver insatisfeito ou frustrado
 
-IMPORTANTE: Ao usar notify_human, NÃO responda ao cliente com texto. Apenas chame a função notify_human.
-Ao usar notify_human, forneça:
-- reason: Motivo claro e conciso da transferência
-- summary: Histórico completo da conversa, incluindo TODAS as mensagens abaixo:
+IMPORTANTE: Ao usar notify_human, forneça:
+- reason: Motivo claro (ex: "Confirmação de pedido", "Transferência solicitada", etc.)
+- conversation_history: Histórico COMPLETO da conversa. Copie TODAS as mensagens abaixo:
 
+---INÍCIO DO HISTÓRICO---
 ${historyForSummary}
+---FIM DO HISTÓRICO---
 
-Inclua também a mensagem atual do cliente no summary.
+Inclua também a mensagem atual do cliente no conversation_history.
+
+- order_details: Se for um pedido, liste TODOS os detalhes: produtos, quantidades, valores, endereço de entrega, forma de pagamento, observações, etc.
 - customer_name: Nome do cliente se mencionado na conversa`;
     }
 
@@ -439,12 +448,14 @@ Inclua também a mensagem atual do cliente no summary.
             const args = JSON.parse(toolCall.function.arguments);
             console.log('=== notify_human Tool Call ===');
             console.log('Reason:', args.reason);
-            console.log('Summary:', args.summary);
+            console.log('Conversation history:', args.conversation_history?.substring(0, 200));
+            console.log('Order details:', args.order_details);
             console.log('Customer name:', args.customer_name);
 
             notifyHuman = {
               reason: args.reason || 'Transferência solicitada',
-              summary: args.summary || 'Sem resumo disponível',
+              conversationHistory: args.conversation_history || 'Sem histórico disponível',
+              orderDetails: args.order_details,
               customerName: args.customer_name,
               customerPhone: phoneNumber,
             };
@@ -456,7 +467,8 @@ Inclua também a mensagem atual do cliente no summary.
               `Tool: notify_human - "${args.reason}"`,
               {
                 reason: args.reason,
-                summary: args.summary,
+                conversationHistory: args.conversation_history?.substring(0, 500),
+                orderDetails: args.order_details,
                 customerName: args.customer_name,
                 customerPhone: phoneNumber,
                 notificationNumber: agent.notification_number,
@@ -558,17 +570,22 @@ export async function generateTestResponse(agent: AgentWithConfig, userMessage: 
 Você tem a capacidade de notificar um atendente humano via WhatsApp quando necessário.
 Use a função "notify_human" quando:
 - O cliente pedir explicitamente para falar com um humano
+- O cliente confirmar um pedido/compra
 - Você não conseguir resolver o problema do cliente
 - A situação for complexa e requer análise humana
 - O cliente estiver insatisfeito ou frustrado
 
 IMPORTANTE: Ao usar notify_human, forneça:
-- reason: Motivo claro e conciso da transferência
-- summary: Histórico completo da conversa, incluindo TODAS as mensagens abaixo:
+- reason: Motivo claro (ex: "Confirmação de pedido", "Transferência solicitada", etc.)
+- conversation_history: Histórico COMPLETO da conversa. Copie TODAS as mensagens abaixo:
 
+---INÍCIO DO HISTÓRICO---
 ${historyForSummary}
+---FIM DO HISTÓRICO---
 
-Inclua também a mensagem atual do cliente no summary.
+Inclua também a mensagem atual do cliente no conversation_history.
+
+- order_details: Se for um pedido, liste TODOS os detalhes: produtos, quantidades, valores, endereço de entrega, forma de pagamento, observações, etc.
 - customer_name: Nome do cliente se mencionado na conversa`;
     }
 
@@ -649,7 +666,19 @@ Inclua também a mensagem atual do cliente no summary.
         if (toolCall.function.name === 'notify_human') {
           try {
             const args = JSON.parse(toolCall.function.arguments);
-            textResponse = `🔔 **Transferência para Humano Solicitada**\n\n**Motivo:** ${args.reason}\n\n**Resumo:** ${args.summary}${args.customer_name ? `\n\n**Nome do cliente:** ${args.customer_name}` : ''}`;
+            let responseText = `🔔 **Transferência para Humano Solicitada**\n\n**Motivo:** ${args.reason}`;
+            
+            if (args.order_details) {
+              responseText += `\n\n🛒 **Detalhes do Pedido:**\n${args.order_details}`;
+            }
+            
+            responseText += `\n\n💬 **Histórico:**\n${args.conversation_history?.substring(0, 500) || 'Sem histórico'}`;
+            
+            if (args.customer_name) {
+              responseText += `\n\n**Nome do cliente:** ${args.customer_name}`;
+            }
+            
+            textResponse = responseText;
           } catch (e) {
             console.error('Error parsing notify_human tool call:', e);
             textResponse = '🔔 Transferência para atendente humano solicitada.';
