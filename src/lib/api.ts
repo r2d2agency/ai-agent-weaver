@@ -205,3 +205,67 @@ export const deleteConversation = (agentId: string, phoneNumber: string) =>
     `/api/conversations/agent/${agentId}/phone/${encodeURIComponent(phoneNumber)}`,
     { method: 'DELETE' }
   );
+
+// Products
+export interface Product {
+  id: string;
+  agent_id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: string | null;
+  sku: string | null;
+  stock: number | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export const getProducts = (agentId: string) =>
+  apiRequest<Product[]>(`/api/products/${agentId}`);
+
+export const createProduct = (agentId: string, data: {
+  name: string;
+  description?: string;
+  price: number;
+  category?: string;
+  sku?: string;
+  stock?: number;
+  is_active?: boolean;
+}) => apiRequest<Product>(`/api/products/${agentId}`, {
+  method: 'POST',
+  body: JSON.stringify(data),
+});
+
+export const updateProduct = (agentId: string, productId: string, data: Partial<{
+  name: string;
+  description: string;
+  price: number;
+  category: string;
+  sku: string;
+  stock: number;
+  is_active: boolean;
+}>) => apiRequest<Product>(`/api/products/${agentId}/${productId}`, {
+  method: 'PUT',
+  body: JSON.stringify(data),
+});
+
+export const deleteProduct = (agentId: string, productId: string) =>
+  apiRequest<{ success: boolean }>(`/api/products/${agentId}/${productId}`, {
+    method: 'DELETE',
+  });
+
+export const bulkImportProducts = (agentId: string, products: Array<{
+  name: string;
+  description?: string;
+  price: number;
+  category?: string;
+  sku?: string;
+  stock?: number;
+}>) => apiRequest<{ success: boolean; count: number; products: Product[] }>(
+  `/api/products/${agentId}/bulk`,
+  {
+    method: 'POST',
+    body: JSON.stringify({ products }),
+  }
+);

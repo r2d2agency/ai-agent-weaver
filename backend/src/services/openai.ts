@@ -173,6 +173,98 @@ Exemplo ERRADO: Escrever ![PETRO POWER 150](url) no texto`;
   return { context, items };
 }
 
+// Product catalog interface
+interface ProductItem {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: string | null;
+  sku: string | null;
+  stock: number | null;
+  is_active: boolean;
+}
+
+// Get products context for agent prompt
+async function getProductsContext(agentId: string): Promise<{ context: string; items: ProductItem[] }> {
+  const result = await query(
+    `SELECT id, name, description, price, category, sku, stock, is_active 
+     FROM agent_products 
+     WHERE agent_id = $1 AND is_active = true 
+     ORDER BY category, name`,
+    [agentId]
+  );
+  
+  const items = result.rows as ProductItem[];
+  if (items.length === 0) {
+    return { context: '', items: [] };
+  }
+  
+  // Group by category
+  const byCategory: Record<string, ProductItem[]> = {};
+  for (const item of items) {
+    const cat = item.category || 'Sem Categoria';
+    if (!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push(item);
+  }
+  
+  let productList = '';
+  for (const [category, products] of Object.entries(byCategory)) {
+    productList += `\n### ${category}:\n`;
+    for (const p of products) {
+      const stockInfo = p.stock !== null ? ` (Estoque: ${p.stock})` : '';
+      productList += `- "${p.name}" - R$ ${p.price.toFixed(2)}${stockInfo}\n`;
+      if (p.description) productList += `  Descrição: ${p.description}\n`;
+    }
+  }
+  
+  const context = `\n\n## 📦 Catálogo de Produtos Disponíveis:\n${productList}
+
+## REGRAS PARA CONSULTA E CÁLCULO DE PRODUTOS:
+1. Use a função "calculate_order" para calcular o total de um pedido com múltiplos produtos.
+2. Sempre confirme os produtos e quantidades com o cliente antes de calcular.
+3. Se o cliente perguntar preço, informe o valor unitário do catálogo acima.
+4. Para pedidos, some os valores usando calculate_order passando a lista de produtos e quantidades.
+5. Se um produto não estiver no catálogo, informe que não está disponível.
+
+Exemplo de uso: calculate_order com items: [{"name": "Produto X", "quantity": 2}, {"name": "Produto Y", "quantity": 1}]`;
+  
+  return { context, items };
+}
+
+// Tool for calculating orders
+const calculateOrderTool = {
+  type: 'function' as const,
+  function: {
+    name: 'calculate_order',
+    description: 'Calcula o total de um pedido com base nos produtos e quantidades informados. Use quando o cliente quiser saber o valor total de múltiplos produtos ou confirmar um pedido.',
+    parameters: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: {
+                type: 'string',
+                description: 'Nome exato do produto (conforme listado no catálogo)'
+              },
+              quantity: {
+                type: 'number',
+                description: 'Quantidade do produto'
+              }
+            },
+            required: ['name', 'quantity']
+          },
+          description: 'Lista de produtos com suas quantidades'
+        }
+      },
+      required: ['items']
+    }
+  }
+};
+
 // Tools for media sending
 const mediaTools = [
   {
@@ -292,6 +384,9 @@ export async function generateResponse(
     // Get media context
     const { context: mediaContext, items: mediaItems } = await getMediaContext(agent.id);
 
+    // Get products context
+    const { context: productsContext, items: productItems } = await getProductsContext(agent.id);
+
     // Build system prompt with instructions for natural responses
     const naturalResponseInstruction = `
 
@@ -312,6 +407,10 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
     
     if (mediaContext) {
       systemPrompt += mediaContext;
+    }
+
+    if (productsContext) {
+      systemPrompt += productsContext;
     }
 
     // Build conversation history summary for notify_human
@@ -418,6 +517,9 @@ Inclua também a mensagem atual do cliente no conversation_history.
     const availableTools: any[] = [];
     if (mediaItems.length > 0) {
       availableTools.push(...mediaTools);
+    }
+    if (productItems.length > 0) {
+      availableTools.push(calculateOrderTool);
     }
     if (agent.notification_number) {
       availableTools.push(notifyHumanTool);
@@ -634,6 +736,66 @@ Inclua também a mensagem atual do cliente no conversation_history.
           } catch (e) {
             console.error('Error parsing collect_customer_info tool call:', e);
             await createLog(agent.id, 'error', 'Erro ao processar collect_customer_info', { error: String(e) }, phoneNumber, 'whatsapp');
+          }
+        }
+
+        // Handle calculate_order tool call
+        if (toolCall.function.name === 'calculate_order') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            console.log('=== calculate_order Tool Call ===');
+            console.log('Items:', JSON.stringify(args.items));
+
+            const orderItems: { name: string; quantity: number }[] = args.items || [];
+            let orderTotal = 0;
+            const orderDetails: string[] = [];
+            const notFoundItems: string[] = [];
+
+            for (const item of orderItems) {
+              const product = productItems.find(
+                p => p.name.toLowerCase() === item.name.toLowerCase() ||
+                     p.name.toLowerCase().includes(item.name.toLowerCase()) ||
+                     item.name.toLowerCase().includes(p.name.toLowerCase())
+              );
+              
+              if (product) {
+                const subtotal = product.price * item.quantity;
+                orderTotal += subtotal;
+                orderDetails.push(`${item.quantity}x ${product.name} = R$ ${subtotal.toFixed(2)}`);
+                console.log(`✓ Product found: ${product.name} x ${item.quantity} = R$ ${subtotal.toFixed(2)}`);
+              } else {
+                notFoundItems.push(item.name);
+                console.log(`✗ Product not found: ${item.name}`);
+              }
+            }
+
+            // Build order summary message
+            let orderSummary = '📋 *Resumo do Pedido*\n\n';
+            orderSummary += orderDetails.join('\n');
+            orderSummary += `\n\n💰 *Total: R$ ${orderTotal.toFixed(2)}*`;
+            
+            if (notFoundItems.length > 0) {
+              orderSummary += `\n\n⚠️ Produtos não encontrados: ${notFoundItems.join(', ')}`;
+            }
+
+            toolSuggestedMessage = orderSummary;
+
+            await createLog(
+              agent.id,
+              'tool_call',
+              `Tool: calculate_order - Total R$ ${orderTotal.toFixed(2)}`,
+              {
+                items: orderItems,
+                orderDetails,
+                total: orderTotal,
+                notFoundItems,
+              },
+              phoneNumber,
+              'whatsapp'
+            );
+          } catch (e) {
+            console.error('Error parsing calculate_order tool call:', e);
+            await createLog(agent.id, 'error', 'Erro ao processar calculate_order', { error: String(e) }, phoneNumber, 'whatsapp');
           }
         }
       }
