@@ -319,9 +319,18 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
       .map((msg, i) => `${msg.role === 'user' ? 'Cliente' : 'Agente'}: ${msg.content}`)
       .join('\n');
 
-    // Get collected data for this contact
+// Get collected data for this contact
     const collectedData = await getContactCollectedData(phoneNumber);
     const requiredFields = agent.required_fields || [];
+
+    // Check if there was already a transfer for this conversation
+    const transferCheckResult = await query(
+      `SELECT takeover_until FROM conversation_activity 
+       WHERE agent_id = $1 AND phone_number = $2 
+       AND takeover_until > CURRENT_TIMESTAMP`,
+      [agent.id, phoneNumber]
+    );
+    const alreadyTransferred = transferCheckResult.rows.length > 0;
 
     // Add notify_human context if notification number is configured
     if (agent.notification_number) {
@@ -348,9 +357,24 @@ ${missingFields.length > 0
   : '✅ Todas as variáveis obrigatórias foram coletadas. Você pode prosseguir com notify_human.'}`;
       }
 
+      // Add transfer status context
+      const transferStatusContext = alreadyTransferred 
+        ? `\n\n### ⚠️ ESTADO DA CONVERSA: JÁ TRANSFERIDO
+Este cliente JÁ FOI TRANSFERIDO para um atendente humano nesta conversa.
+NÃO CHAME notify_human novamente. O atendente já foi notificado e está ciente.
+
+Se o cliente retornar:
+1. Pergunte se deseja ajuda com o pedido/assunto anterior ou se tem algo novo
+2. Continue o atendimento normalmente
+3. Só transfira novamente se surgir uma situação COMPLETAMENTE NOVA que exija intervenção humana
+4. Se o cliente perguntar sobre o status do atendimento anterior, informe que o atendente já foi notificado e entrará em contato`
+        : '';
+
       systemPrompt += `\n\n## Transferência para Atendente Humano:
 Você tem a capacidade de notificar um atendente humano via WhatsApp quando necessário.
-Use a função "notify_human" quando:
+${transferStatusContext}
+
+Use a função "notify_human" APENAS quando:
 - O cliente pedir explicitamente para falar com um humano
 - O cliente confirmar um pedido/compra
 - Você não conseguir resolver o problema do cliente
