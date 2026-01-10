@@ -90,6 +90,8 @@ export const updateAgent = (id: string, data: Partial<{
   widgetSecondaryColor: string;
   widgetBackgroundColor: string;
   widgetTextColor: string;
+  widgetTrainingMode: boolean;
+  widgetResetCode: string;
   audioResponseEnabled: boolean;
   audioResponseVoice: string;
   notificationNumber: string;

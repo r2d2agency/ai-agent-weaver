@@ -48,6 +48,8 @@ const AgentDetailsPage = () => {
     widgetSecondaryColor: '#764ba2',
     widgetBackgroundColor: '#ffffff',
     widgetTextColor: '#333333',
+    widgetTrainingMode: false,
+    widgetResetCode: '',
     ghostMode: false,
     takeoverTimeout: 60,
     inactivityEnabled: false,
@@ -106,6 +108,8 @@ const AgentDetailsPage = () => {
         widgetSecondaryColor: agentData.widget_secondary_color || '#764ba2',
         widgetBackgroundColor: agentData.widget_background_color || '#ffffff',
         widgetTextColor: agentData.widget_text_color || '#333333',
+        widgetTrainingMode: agentData.widget_training_mode === true,
+        widgetResetCode: agentData.widget_reset_code || '',
         ghostMode: agentData.ghost_mode === true,
         takeoverTimeout: agentData.takeover_timeout || 60,
         inactivityEnabled: agentData.inactivity_enabled === true,
@@ -1414,6 +1418,39 @@ const AgentDetailsPage = () => {
                   </div>
                 </div>
 
+                {/* Training Mode */}
+                <div className="space-y-3 pt-4 border-t border-border">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold flex items-center gap-2">
+                        🧪 Modo Treinamento
+                      </Label>
+                      <p className="text-[10px] text-muted-foreground">
+                        Exibe badge e botão de reset para testar o agente
+                      </p>
+                    </div>
+                    <Switch
+                      checked={formData.widgetTrainingMode}
+                      onCheckedChange={(checked) => setFormData(prev => ({ ...prev, widgetTrainingMode: checked }))}
+                    />
+                  </div>
+                  
+                  {formData.widgetTrainingMode && (
+                    <div className="space-y-2">
+                      <Label className="text-xs">Código de Reset (opcional)</Label>
+                      <Input
+                        value={formData.widgetResetCode}
+                        onChange={(e) => setFormData(prev => ({ ...prev, widgetResetCode: e.target.value }))}
+                        placeholder="Ex: #reset123"
+                        className="bg-muted border-border text-sm font-mono"
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        Se preenchido, usuários podem digitar este código no chat para resetar a conversa (além do botão).
+                      </p>
+                    </div>
+                  )}
+                </div>
+
                 {/* Live Preview */}
                 <div className="space-y-2 pt-4 border-t border-border">
                   <Label className="text-xs font-semibold">Preview ao Vivo</Label>
@@ -1517,6 +1554,8 @@ const AgentDetailsPage = () => {
                         widgetSecondaryColor: formData.widgetSecondaryColor,
                         widgetBackgroundColor: formData.widgetBackgroundColor,
                         widgetTextColor: formData.widgetTextColor,
+                        widgetTrainingMode: formData.widgetTrainingMode,
+                        widgetResetCode: formData.widgetResetCode,
                       } as any,
                     });
                   }}

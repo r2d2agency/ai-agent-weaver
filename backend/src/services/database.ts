@@ -43,6 +43,8 @@ export async function initDatabase() {
         widget_secondary_color VARCHAR(20) DEFAULT '#764ba2',
         widget_background_color VARCHAR(20) DEFAULT '#ffffff',
         widget_text_color VARCHAR(20) DEFAULT '#333333',
+        widget_training_mode BOOLEAN DEFAULT false,
+        widget_reset_code VARCHAR(100),
         openai_api_key VARCHAR(255),
         openai_model VARCHAR(100) DEFAULT 'gpt-4o',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -266,6 +268,12 @@ export async function initDatabase() {
         END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='widget_text_color') THEN
           ALTER TABLE agents ADD COLUMN widget_text_color VARCHAR(20) DEFAULT '#333333';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='widget_training_mode') THEN
+          ALTER TABLE agents ADD COLUMN widget_training_mode BOOLEAN DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='widget_reset_code') THEN
+          ALTER TABLE agents ADD COLUMN widget_reset_code VARCHAR(100);
         END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='is_audio') THEN
           ALTER TABLE messages ADD COLUMN is_audio BOOLEAN DEFAULT false;
