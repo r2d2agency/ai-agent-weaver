@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer } from 'lucide-react';
+import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -39,6 +39,10 @@ const AgentDetailsPage = () => {
     inactivityEnabled: false,
     inactivityTimeout: 5,
     inactivityMessage: 'Parece que você foi embora. Qualquer coisa, estou por aqui! 👋',
+    operatingHoursEnabled: false,
+    operatingHoursStart: '09:00',
+    operatingHoursEnd: '18:00',
+    outOfHoursMessage: 'Olá! Nosso horário de atendimento é das 09:00 às 18:00. Deixe sua mensagem que responderemos assim que possível! 🕐',
   });
 
   const [testingInstance, setTestingInstance] = useState(false);
@@ -64,6 +68,10 @@ const AgentDetailsPage = () => {
         inactivityEnabled: agentData.inactivity_enabled === true,
         inactivityTimeout: agentData.inactivity_timeout || 5,
         inactivityMessage: agentData.inactivity_message || 'Parece que você foi embora. Qualquer coisa, estou por aqui! 👋',
+        operatingHoursEnabled: agentData.operating_hours_enabled === true,
+        operatingHoursStart: agentData.operating_hours_start || '09:00',
+        operatingHoursEnd: agentData.operating_hours_end || '18:00',
+        outOfHoursMessage: agentData.out_of_hours_message || 'Olá! Nosso horário de atendimento é das 09:00 às 18:00. Deixe sua mensagem que responderemos assim que possível! 🕐',
       });
     }
   }, [agentData]);
@@ -135,6 +143,27 @@ const AgentDetailsPage = () => {
       data: { 
         inactivityTimeout: formData.inactivityTimeout,
         inactivityMessage: formData.inactivityMessage,
+      } as any,
+    });
+  };
+
+  const handleToggleOperatingHours = (enabled: boolean) => {
+    if (!id) return;
+    setFormData(prev => ({ ...prev, operatingHoursEnabled: enabled }));
+    updateAgentMutation.mutate({
+      id,
+      data: { operatingHoursEnabled: enabled } as any,
+    });
+  };
+
+  const handleOperatingHoursSettingsChange = () => {
+    if (!id) return;
+    updateAgentMutation.mutate({
+      id,
+      data: { 
+        operatingHoursStart: formData.operatingHoursStart,
+        operatingHoursEnd: formData.operatingHoursEnd,
+        outOfHoursMessage: formData.outOfHoursMessage,
       } as any,
     });
   };
@@ -564,6 +593,60 @@ const AgentDetailsPage = () => {
                     onBlur={handleInactivitySettingsChange}
                     className="bg-muted border-border min-h-[60px] text-sm"
                     placeholder="Mensagem enviada quando o usuário não responde..."
+                  />
+                </div>
+              </div>
+            )}
+          </motion.div>
+
+          {/* Operating Hours Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.179 }}
+            className="glass-card p-6"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                <CalendarClock className="w-4 h-4 text-primary" />
+                Horário de Funcionamento
+              </h3>
+              <Switch
+                checked={formData.operatingHoursEnabled}
+                onCheckedChange={handleToggleOperatingHours}
+              />
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Define quando o agente responde normalmente. Fora do horário, envia mensagem automática.
+            </p>
+            {formData.operatingHoursEnabled && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <Label className="text-xs w-12">Início</Label>
+                  <Input
+                    type="time"
+                    value={formData.operatingHoursStart}
+                    onChange={(e) => setFormData(prev => ({ ...prev, operatingHoursStart: e.target.value }))}
+                    onBlur={handleOperatingHoursSettingsChange}
+                    className="w-28 bg-muted border-border"
+                  />
+                  <Label className="text-xs w-8">Fim</Label>
+                  <Input
+                    type="time"
+                    value={formData.operatingHoursEnd}
+                    onChange={(e) => setFormData(prev => ({ ...prev, operatingHoursEnd: e.target.value }))}
+                    onBlur={handleOperatingHoursSettingsChange}
+                    className="w-28 bg-muted border-border"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Mensagem fora do horário</Label>
+                  <Textarea
+                    value={formData.outOfHoursMessage}
+                    onChange={(e) => setFormData(prev => ({ ...prev, outOfHoursMessage: e.target.value }))}
+                    onBlur={handleOperatingHoursSettingsChange}
+                    className="bg-muted border-border min-h-[60px] text-sm"
+                    placeholder="Mensagem enviada fora do horário de funcionamento..."
                   />
                 </div>
               </div>

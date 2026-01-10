@@ -62,7 +62,8 @@ agentsRouter.put('/:id', async (req, res) => {
     const { 
       name, description, prompt, instanceName, webhookUrl, token, status, 
       audioEnabled, widgetEnabled, ghostMode, takeoverTimeout,
-      inactivityEnabled, inactivityTimeout, inactivityMessage 
+      inactivityEnabled, inactivityTimeout, inactivityMessage,
+      operatingHoursEnabled, operatingHoursStart, operatingHoursEnd, operatingHoursTimezone, outOfHoursMessage
     } = req.body;
     
     const result = await query(
@@ -81,10 +82,15 @@ agentsRouter.put('/:id', async (req, res) => {
            inactivity_enabled = COALESCE($12, inactivity_enabled),
            inactivity_timeout = COALESCE($13, inactivity_timeout),
            inactivity_message = COALESCE($14, inactivity_message),
+           operating_hours_enabled = COALESCE($15, operating_hours_enabled),
+           operating_hours_start = COALESCE($16, operating_hours_start),
+           operating_hours_end = COALESCE($17, operating_hours_end),
+           operating_hours_timezone = COALESCE($18, operating_hours_timezone),
+           out_of_hours_message = COALESCE($19, out_of_hours_message),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $15
+       WHERE id = $20
        RETURNING *`,
-      [name, description, prompt, instanceName, webhookUrl, token, status, audioEnabled, widgetEnabled, ghostMode, takeoverTimeout, inactivityEnabled, inactivityTimeout, inactivityMessage, req.params.id]
+      [name, description, prompt, instanceName, webhookUrl, token, status, audioEnabled, widgetEnabled, ghostMode, takeoverTimeout, inactivityEnabled, inactivityTimeout, inactivityMessage, operatingHoursEnabled, operatingHoursStart, operatingHoursEnd, operatingHoursTimezone, outOfHoursMessage, req.params.id]
     );
     
     if (result.rows.length === 0) {

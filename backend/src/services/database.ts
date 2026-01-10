@@ -27,6 +27,11 @@ export async function initDatabase() {
         inactivity_enabled BOOLEAN DEFAULT false,
         inactivity_timeout INTEGER DEFAULT 5,
         inactivity_message TEXT DEFAULT 'Parece que você foi embora. Qualquer coisa, estou por aqui! 👋',
+        operating_hours_enabled BOOLEAN DEFAULT false,
+        operating_hours_start TIME DEFAULT '09:00',
+        operating_hours_end TIME DEFAULT '18:00',
+        operating_hours_timezone VARCHAR(50) DEFAULT 'America/Sao_Paulo',
+        out_of_hours_message TEXT DEFAULT 'Olá! Nosso horário de atendimento é das 09:00 às 18:00. Deixe sua mensagem que responderemos assim que possível! 🕐',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -144,6 +149,21 @@ export async function initDatabase() {
         END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='inactivity_message') THEN
           ALTER TABLE agents ADD COLUMN inactivity_message TEXT DEFAULT 'Parece que você foi embora. Qualquer coisa, estou por aqui! 👋';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='operating_hours_enabled') THEN
+          ALTER TABLE agents ADD COLUMN operating_hours_enabled BOOLEAN DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='operating_hours_start') THEN
+          ALTER TABLE agents ADD COLUMN operating_hours_start TIME DEFAULT '09:00';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='operating_hours_end') THEN
+          ALTER TABLE agents ADD COLUMN operating_hours_end TIME DEFAULT '18:00';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='operating_hours_timezone') THEN
+          ALTER TABLE agents ADD COLUMN operating_hours_timezone VARCHAR(50) DEFAULT 'America/Sao_Paulo';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='out_of_hours_message') THEN
+          ALTER TABLE agents ADD COLUMN out_of_hours_message TEXT DEFAULT 'Olá! Nosso horário de atendimento é das 09:00 às 18:00. Deixe sua mensagem que responderemos assim que possível! 🕐';
         END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='is_audio') THEN
           ALTER TABLE messages ADD COLUMN is_audio BOOLEAN DEFAULT false;
