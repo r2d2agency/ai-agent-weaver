@@ -1,4 +1,4 @@
-import OpenAI, { toFile } from 'openai';
+import OpenAI from 'openai';
 import { query } from './database.js';
 
 let globalOpenaiClient: OpenAI | null = null;
@@ -186,7 +186,13 @@ export async function transcribeAudio(
       return 'audio.ogg';
     })();
 
-    const audioFile = await toFile(audioBuffer, inferredName, { contentType: cleanMimeType });
+    // Avoid depending on DOM lib types in TypeScript
+    const FileCtor = (globalThis as any).File;
+    if (!FileCtor) {
+      throw new Error('Global File constructor not available. Please run on Node 18+');
+    }
+
+    const audioFile = new FileCtor([audioBuffer], inferredName, { type: cleanMimeType });
 
     const transcription = await client.audio.transcriptions.create({
       file: audioFile,

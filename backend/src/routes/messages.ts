@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { query } from '../services/database.js';
-import { sendMessage, getAgentEvolutionCredentials } from '../services/evolution.js';
+import { sendMessage } from '../services/evolution.js';
 
 export const messagesRouter = Router();
 
