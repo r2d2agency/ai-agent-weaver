@@ -216,10 +216,12 @@ export interface Product {
   category: string | null;
   sku: string | null;
   stock: number | null;
+  image_url: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
 }
+
 
 export const getProducts = (agentId: string) =>
   apiRequest<Product[]>(`/api/products/${agentId}`);
@@ -231,11 +233,13 @@ export const createProduct = (agentId: string, data: {
   category?: string;
   sku?: string;
   stock?: number;
+  image_url?: string;
   is_active?: boolean;
 }) => apiRequest<Product>(`/api/products/${agentId}`, {
   method: 'POST',
   body: JSON.stringify(data),
 });
+
 
 export const updateProduct = (agentId: string, productId: string, data: Partial<{
   name: string;
@@ -244,11 +248,13 @@ export const updateProduct = (agentId: string, productId: string, data: Partial<
   category: string;
   sku: string;
   stock: number;
+  image_url: string;
   is_active: boolean;
 }>) => apiRequest<Product>(`/api/products/${agentId}/${productId}`, {
   method: 'PUT',
   body: JSON.stringify(data),
 });
+
 
 export const deleteProduct = (agentId: string, productId: string) =>
   apiRequest<{ success: boolean }>(`/api/products/${agentId}/${productId}`, {

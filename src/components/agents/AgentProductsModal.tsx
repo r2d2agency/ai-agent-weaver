@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { getProducts, createProduct, updateProduct, deleteProduct, Product } from '@/lib/api';
-import { Plus, Trash2, Edit2, Loader2, Package, Save, X, Upload } from 'lucide-react';
+import { Plus, Trash2, Edit2, Loader2, Package, Save, X, Upload, ImageIcon } from 'lucide-react';
 
 interface AgentProductsModalProps {
   open: boolean;
@@ -24,6 +24,8 @@ export function AgentProductsModal({ open, onOpenChange, agentId, agentName }: A
   const queryClient = useQueryClient();
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -31,8 +33,10 @@ export function AgentProductsModal({ open, onOpenChange, agentId, agentName }: A
     category: '',
     sku: '',
     stock: '',
+    image_url: '',
     is_active: true,
   });
+
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ['products', agentId],
@@ -84,11 +88,14 @@ export function AgentProductsModal({ open, onOpenChange, agentId, agentName }: A
       category: '',
       sku: '',
       stock: '',
+      image_url: '',
       is_active: true,
     });
     setEditingProduct(null);
     setShowForm(false);
+    setImagePreview(null);
   };
+
 
   const handleEdit = (product: Product) => {
     setEditingProduct(product);
@@ -99,10 +106,13 @@ export function AgentProductsModal({ open, onOpenChange, agentId, agentName }: A
       category: product.category || '',
       sku: product.sku || '',
       stock: product.stock?.toString() || '',
+      image_url: product.image_url || '',
       is_active: product.is_active,
     });
+    setImagePreview(product.image_url || null);
     setShowForm(true);
   };
+
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,8 +124,10 @@ export function AgentProductsModal({ open, onOpenChange, agentId, agentName }: A
       category: formData.category || undefined,
       sku: formData.sku || undefined,
       stock: formData.stock ? parseInt(formData.stock) : undefined,
+      image_url: formData.image_url || undefined,
       is_active: formData.is_active,
     };
+
 
     if (editingProduct) {
       updateMutation.mutate({ productId: editingProduct.id, data });
@@ -237,6 +249,48 @@ export function AgentProductsModal({ open, onOpenChange, agentId, agentName }: A
                 </div>
               </div>
 
+              {/* Image URL field */}
+              <div className="space-y-2">
+                <Label htmlFor="image_url">Imagem do Produto</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="image_url"
+                    value={formData.image_url}
+                    onChange={(e) => {
+                      setFormData({ ...formData, image_url: e.target.value });
+                      setImagePreview(e.target.value || null);
+                    }}
+                    placeholder="URL da imagem (https://...)"
+                    className="flex-1"
+                  />
+                </div>
+                {imagePreview && (
+                  <div className="mt-2 relative inline-block">
+                    <img 
+                      src={imagePreview} 
+                      alt="Preview" 
+                      className="h-20 w-20 object-cover rounded-md border"
+                      onError={() => setImagePreview(null)}
+                    />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute -top-2 -right-2 h-6 w-6"
+                      onClick={() => {
+                        setFormData({ ...formData, image_url: '' });
+                        setImagePreview(null);
+                      }}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Cole a URL de uma imagem. A IA poderá enviar essa foto quando o cliente perguntar sobre o produto.
+                </p>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="description">Descrição</Label>
                 <Textarea
@@ -247,6 +301,7 @@ export function AgentProductsModal({ open, onOpenChange, agentId, agentName }: A
                   rows={2}
                 />
               </div>
+
 
               <div className="flex gap-2">
                 <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
@@ -283,6 +338,7 @@ export function AgentProductsModal({ open, onOpenChange, agentId, agentName }: A
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-[60px]">Foto</TableHead>
                         <TableHead>Nome</TableHead>
                         <TableHead>Preço</TableHead>
                         <TableHead>Estoque</TableHead>
@@ -293,6 +349,19 @@ export function AgentProductsModal({ open, onOpenChange, agentId, agentName }: A
                     <TableBody>
                       {categoryProducts.map((product) => (
                         <TableRow key={product.id}>
+                          <TableCell>
+                            {product.image_url ? (
+                              <img 
+                                src={product.image_url} 
+                                alt={product.name}
+                                className="h-10 w-10 object-cover rounded-md"
+                              />
+                            ) : (
+                              <div className="h-10 w-10 rounded-md bg-muted flex items-center justify-center">
+                                <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                              </div>
+                            )}
+                          </TableCell>
                           <TableCell>
                             <div>
                               <p className="font-medium">{product.name}</p>
@@ -313,6 +382,7 @@ export function AgentProductsModal({ open, onOpenChange, agentId, agentName }: A
                             {product.stock !== null ? product.stock : '-'}
                           </TableCell>
                           <TableCell>
+
                             <Badge variant={product.is_active ? 'default' : 'secondary'}>
                               {product.is_active ? 'Ativo' : 'Inativo'}
                             </Badge>
