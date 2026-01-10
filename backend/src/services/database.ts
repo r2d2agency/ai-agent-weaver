@@ -20,6 +20,8 @@ export async function initDatabase() {
         webhook_url VARCHAR(500),
         token VARCHAR(255),
         messages_count INTEGER DEFAULT 0,
+        audio_enabled BOOLEAN DEFAULT true,
+        widget_enabled BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -31,6 +33,7 @@ export async function initDatabase() {
         content TEXT NOT NULL,
         phone_number VARCHAR(50) NOT NULL,
         status VARCHAR(50) DEFAULT 'sent',
+        is_audio BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
@@ -70,6 +73,30 @@ export async function initDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(user_id, agent_id)
       );
+
+      -- Widget messages table
+      CREATE TABLE IF NOT EXISTS widget_messages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agent_id UUID REFERENCES agents(id) ON DELETE CASCADE,
+        session_id VARCHAR(255) NOT NULL,
+        sender VARCHAR(50) NOT NULL,
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- Add new columns if they don't exist (for existing databases)
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='audio_enabled') THEN
+          ALTER TABLE agents ADD COLUMN audio_enabled BOOLEAN DEFAULT true;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='widget_enabled') THEN
+          ALTER TABLE agents ADD COLUMN widget_enabled BOOLEAN DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='is_audio') THEN
+          ALTER TABLE messages ADD COLUMN is_audio BOOLEAN DEFAULT false;
+        END IF;
+      END $$;
     `);
 
     // Create default admin user if not exists

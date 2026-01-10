@@ -127,3 +127,60 @@ export async function generateTestResponse(agent: Agent, userMessage: string, hi
     throw error;
   }
 }
+
+// Transcribe audio to text using Whisper
+export async function transcribeAudio(audioBuffer: Buffer, mimeType: string = 'audio/ogg'): Promise<string> {
+  try {
+    const client = await getOpenAIClient();
+    
+    // Create a File-like object for the API
+    const audioFile = new File([audioBuffer], 'audio.ogg', { type: mimeType });
+    
+    const transcription = await client.audio.transcriptions.create({
+      file: audioFile,
+      model: 'whisper-1',
+      language: 'pt', // Portuguese
+    });
+
+    return transcription.text;
+  } catch (error) {
+    console.error('Whisper transcription error:', error);
+    throw error;
+  }
+}
+
+// Generate response for widget chat (public endpoint)
+export async function generateWidgetResponse(agent: Agent, userMessage: string, sessionId: string, history: HistoryMessage[]): Promise<string> {
+  try {
+    // Get agent documents for context (RAG)
+    const docsResult = await query(
+      `SELECT content FROM documents WHERE agent_id = $1`,
+      [agent.id]
+    );
+    
+    const docsContext = docsResult.rows
+      .map((doc: any) => doc.content)
+      .filter(Boolean)
+      .join('\n\n');
+
+    const systemPrompt = docsContext 
+      ? `${agent.prompt}\n\nContexto adicional dos documentos:\n${docsContext}`
+      : agent.prompt;
+
+    const client = await getOpenAIClient();
+    const response = await client.chat.completions.create({
+      model: process.env.OPENAI_MODEL || 'gpt-4o',
+      max_completion_tokens: 1000,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...history.map(msg => ({ role: msg.role, content: msg.content })),
+        { role: 'user', content: userMessage },
+      ],
+    });
+
+    return response.choices[0]?.message?.content || 'Desculpe, não consegui gerar uma resposta.';
+  } catch (error) {
+    console.error('OpenAI widget error:', error);
+    throw error;
+  }
+}

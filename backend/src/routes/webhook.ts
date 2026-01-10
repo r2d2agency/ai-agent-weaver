@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { query } from '../services/database.js';
-import { generateResponse } from '../services/openai.js';
-import { sendMessage } from '../services/evolution.js';
+import { generateResponse, transcribeAudio } from '../services/openai.js';
+import { sendMessage, getEvolutionCredentials } from '../services/evolution.js';
+import axios from 'axios';
 
 export const webhookRouter = Router();
 
@@ -18,9 +19,44 @@ interface WebhookPayload {
       extendedTextMessage?: {
         text: string;
       };
+      audioMessage?: {
+        url?: string;
+        mimetype?: string;
+        mediaKey?: string;
+        fileEncSha256?: string;
+        fileSha256?: string;
+        fileLength?: number;
+        seconds?: number;
+        ptt?: boolean;
+      };
     };
     messageTimestamp: number;
   };
+}
+
+async function downloadAudio(instanceName: string, messageId: string): Promise<Buffer | null> {
+  try {
+    const { apiUrl, apiKey } = await getEvolutionCredentials();
+    
+    // Try to get media from Evolution API
+    const response = await axios.get(
+      `${apiUrl}/chat/getBase64FromMediaMessage/${instanceName}`,
+      {
+        headers: { 'apikey': apiKey },
+        params: { messageId },
+        timeout: 30000,
+      }
+    );
+
+    if (response.data?.base64) {
+      return Buffer.from(response.data.base64, 'base64');
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error downloading audio:', error);
+    return null;
+  }
 }
 
 webhookRouter.post('/:instanceName', async (req, res) => {
@@ -31,15 +67,6 @@ webhookRouter.post('/:instanceName', async (req, res) => {
     // Ignore messages from the bot itself
     if (payload.data?.key?.fromMe) {
       return res.status(200).json({ status: 'ignored', reason: 'fromMe' });
-    }
-
-    // Extract message content
-    const messageContent = 
-      payload.data?.message?.conversation || 
-      payload.data?.message?.extendedTextMessage?.text;
-
-    if (!messageContent) {
-      return res.status(200).json({ status: 'ignored', reason: 'no content' });
     }
 
     // Extract phone number (remove @s.whatsapp.net)
@@ -57,12 +84,52 @@ webhookRouter.post('/:instanceName', async (req, res) => {
     }
 
     const agent = agentResult.rows[0];
+    
+    // Check if audio processing is enabled for this agent
+    const audioEnabled = agent.audio_enabled !== false; // Default to true
+
+    let messageContent: string | null = null;
+    let isAudioMessage = false;
+
+    // Check for audio message
+    if (payload.data?.message?.audioMessage && audioEnabled) {
+      isAudioMessage = true;
+      const audioMessage = payload.data.message.audioMessage;
+      
+      console.log(`Received audio message from ${phoneNumber}, attempting to transcribe...`);
+      
+      try {
+        // Download the audio
+        const audioBuffer = await downloadAudio(instanceName, payload.data.key.id);
+        
+        if (audioBuffer) {
+          // Transcribe using Whisper
+          messageContent = await transcribeAudio(audioBuffer, audioMessage.mimetype || 'audio/ogg');
+          console.log(`Transcribed audio: "${messageContent}"`);
+        } else {
+          console.log('Could not download audio');
+          messageContent = '[Áudio recebido - não foi possível transcrever]';
+        }
+      } catch (transcribeError) {
+        console.error('Audio transcription error:', transcribeError);
+        messageContent = '[Áudio recebido - erro na transcrição]';
+      }
+    } else {
+      // Extract text message content
+      messageContent = 
+        payload.data?.message?.conversation || 
+        payload.data?.message?.extendedTextMessage?.text || null;
+    }
+
+    if (!messageContent) {
+      return res.status(200).json({ status: 'ignored', reason: 'no content' });
+    }
 
     // Save user message
     await query(
-      `INSERT INTO messages (agent_id, sender, content, phone_number, status) 
-       VALUES ($1, 'user', $2, $3, 'received')`,
-      [agent.id, messageContent, phoneNumber]
+      `INSERT INTO messages (agent_id, sender, content, phone_number, status, is_audio) 
+       VALUES ($1, 'user', $2, $3, 'received', $4)`,
+      [agent.id, messageContent, phoneNumber, isAudioMessage]
     );
 
     // Generate AI response
@@ -84,7 +151,7 @@ webhookRouter.post('/:instanceName', async (req, res) => {
     // Send response via Evolution API
     await sendMessage(instanceName, phoneNumber, aiResponse);
 
-    res.status(200).json({ status: 'ok', messageId: payload.data.key.id });
+    res.status(200).json({ status: 'ok', messageId: payload.data.key.id, isAudio: isAudioMessage });
   } catch (error) {
     console.error('Webhook error:', error);
     res.status(500).json({ error: 'Internal server error' });
