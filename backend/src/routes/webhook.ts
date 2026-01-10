@@ -64,15 +64,12 @@ webhookRouter.post('/:instanceName', async (req, res) => {
     const { instanceName } = req.params;
     const payload: WebhookPayload = req.body;
 
-    // Ignore messages from the bot itself
-    if (payload.data?.key?.fromMe) {
-      return res.status(200).json({ status: 'ignored', reason: 'fromMe' });
-    }
+    const isFromMe = payload.data?.key?.fromMe === true;
 
     // Extract phone number (remove @s.whatsapp.net)
     const phoneNumber = payload.data.key.remoteJid.replace('@s.whatsapp.net', '');
 
-    // Find agent by instance name
+    // Find agent by instance name (both online and ghost mode agents)
     const agentResult = await query(
       `SELECT * FROM agents WHERE instance_name = $1 AND status = 'online'`,
       [instanceName]
@@ -87,6 +84,8 @@ webhookRouter.post('/:instanceName', async (req, res) => {
     
     // Check if audio processing is enabled for this agent
     const audioEnabled = agent.audio_enabled !== false; // Default to true
+    const ghostMode = agent.ghost_mode === true;
+    const takeoverTimeout = agent.takeover_timeout || 60; // Default 60 seconds
 
     let messageContent: string | null = null;
     let isAudioMessage = false;
@@ -125,20 +124,92 @@ webhookRouter.post('/:instanceName', async (req, res) => {
       return res.status(200).json({ status: 'ignored', reason: 'no content' });
     }
 
+    // If message is from owner (fromMe), store it and set takeover
+    if (isFromMe) {
+      // Save owner's message
+      await query(
+        `INSERT INTO messages (agent_id, sender, content, phone_number, status, is_audio, is_from_owner) 
+         VALUES ($1, 'owner', $2, $3, 'sent', $4, true)`,
+        [agent.id, messageContent, phoneNumber, isAudioMessage]
+      );
+
+      // Update or insert takeover timestamp
+      await query(
+        `INSERT INTO conversation_takeover (agent_id, phone_number, taken_over_at)
+         VALUES ($1, $2, CURRENT_TIMESTAMP)
+         ON CONFLICT (agent_id, phone_number) 
+         DO UPDATE SET taken_over_at = CURRENT_TIMESTAMP`,
+        [agent.id, phoneNumber]
+      );
+
+      // Update agent messages count
+      await query(
+        `UPDATE agents SET messages_count = messages_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+        [agent.id]
+      );
+
+      console.log(`Owner message stored, takeover activated for ${phoneNumber}`);
+      return res.status(200).json({ status: 'ok', reason: 'owner_message_stored', takeover: true });
+    }
+
     // Save user message
     await query(
-      `INSERT INTO messages (agent_id, sender, content, phone_number, status, is_audio) 
-       VALUES ($1, 'user', $2, $3, 'received', $4)`,
+      `INSERT INTO messages (agent_id, sender, content, phone_number, status, is_audio, is_from_owner) 
+       VALUES ($1, 'user', $2, $3, 'received', $4, false)`,
       [agent.id, messageContent, phoneNumber, isAudioMessage]
     );
+
+    // Ghost mode: just store messages, don't respond
+    if (ghostMode) {
+      await query(
+        `UPDATE agents SET messages_count = messages_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+        [agent.id]
+      );
+      console.log(`Ghost mode: message stored for ${phoneNumber}, no response sent`);
+      return res.status(200).json({ status: 'ok', reason: 'ghost_mode', messageStored: true });
+    }
+
+    // Check if conversation is under takeover
+    const takeoverResult = await query(
+      `SELECT taken_over_at FROM conversation_takeover 
+       WHERE agent_id = $1 AND phone_number = $2`,
+      [agent.id, phoneNumber]
+    );
+
+    if (takeoverResult.rows.length > 0) {
+      const takenOverAt = new Date(takeoverResult.rows[0].taken_over_at);
+      const now = new Date();
+      const secondsSinceTakeover = (now.getTime() - takenOverAt.getTime()) / 1000;
+
+      if (secondsSinceTakeover < takeoverTimeout) {
+        // Still in takeover period, don't respond
+        await query(
+          `UPDATE agents SET messages_count = messages_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+          [agent.id]
+        );
+        console.log(`Takeover active: ${Math.round(takeoverTimeout - secondsSinceTakeover)}s remaining for ${phoneNumber}`);
+        return res.status(200).json({ 
+          status: 'ok', 
+          reason: 'takeover_active', 
+          remainingSeconds: Math.round(takeoverTimeout - secondsSinceTakeover) 
+        });
+      } else {
+        // Takeover expired, remove it
+        await query(
+          `DELETE FROM conversation_takeover WHERE agent_id = $1 AND phone_number = $2`,
+          [agent.id, phoneNumber]
+        );
+        console.log(`Takeover expired for ${phoneNumber}, agent resuming`);
+      }
+    }
 
     // Generate AI response
     const aiResponse = await generateResponse(agent, messageContent, phoneNumber);
 
     // Save agent response
     await query(
-      `INSERT INTO messages (agent_id, sender, content, phone_number, status) 
-       VALUES ($1, 'agent', $2, $3, 'sent')`,
+      `INSERT INTO messages (agent_id, sender, content, phone_number, status, is_from_owner) 
+       VALUES ($1, 'agent', $2, $3, 'sent', false)`,
       [agent.id, aiResponse, phoneNumber]
     );
 

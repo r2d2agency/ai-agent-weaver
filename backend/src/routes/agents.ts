@@ -59,7 +59,7 @@ agentsRouter.post('/', async (req, res) => {
 // Update agent
 agentsRouter.put('/:id', async (req, res) => {
   try {
-    const { name, description, prompt, instanceName, webhookUrl, token, status, audioEnabled, widgetEnabled } = req.body;
+    const { name, description, prompt, instanceName, webhookUrl, token, status, audioEnabled, widgetEnabled, ghostMode, takeoverTimeout } = req.body;
     
     const result = await query(
       `UPDATE agents 
@@ -72,10 +72,12 @@ agentsRouter.put('/:id', async (req, res) => {
            status = COALESCE($7, status),
            audio_enabled = COALESCE($8, audio_enabled),
            widget_enabled = COALESCE($9, widget_enabled),
+           ghost_mode = COALESCE($10, ghost_mode),
+           takeover_timeout = COALESCE($11, takeover_timeout),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $10
+       WHERE id = $12
        RETURNING *`,
-      [name, description, prompt, instanceName, webhookUrl, token, status, audioEnabled, widgetEnabled, req.params.id]
+      [name, description, prompt, instanceName, webhookUrl, token, status, audioEnabled, widgetEnabled, ghostMode, takeoverTimeout, req.params.id]
     );
     
     if (result.rows.length === 0) {
