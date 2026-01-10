@@ -129,13 +129,13 @@ const Dashboard = () => {
       </div>
 
       {/* Agents Section */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-foreground">Seus Agentes</h2>
-          <p className="text-sm text-muted-foreground">Gerencie e monitore seus agentes de IA</p>
+          <h2 className="text-lg sm:text-xl font-semibold text-foreground">Seus Agentes</h2>
+          <p className="text-xs sm:text-sm text-muted-foreground">Gerencie e monitore seus agentes de IA</p>
         </div>
         <Button 
-          className="btn-primary-gradient"
+          className="btn-primary-gradient w-full sm:w-auto"
           onClick={() => setCreateModalOpen(true)}
         >
           <Plus className="w-4 h-4 mr-2" />
@@ -204,9 +204,9 @@ const Dashboard = () => {
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                       <Bot className="w-5 h-5 text-primary" />
                     </div>
-                    <div>
-                      <p className="font-medium text-foreground">{agent?.name || 'Agente'}</p>
-                      <p className="text-sm text-muted-foreground truncate max-w-[300px]">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-foreground truncate">{agent?.name || 'Agente'}</p>
+                      <p className="text-sm text-muted-foreground truncate">
                         {message.sender === 'user' ? 'Recebeu mensagem' : 'Respondeu mensagem'}
                       </p>
                     </div>
