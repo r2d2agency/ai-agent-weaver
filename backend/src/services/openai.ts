@@ -62,12 +62,73 @@ interface MessageContent {
   image_url?: { url: string };
 }
 
+interface MediaItem {
+  id: string;
+  name: string;
+  description: string;
+  type: 'image' | 'gallery' | 'video';
+  file_urls: string[];
+  mime_types: string[];
+}
+
+interface ResponseWithMedia {
+  text: string;
+  mediaToSend?: MediaItem[];
+}
+
+// Get media context for agent prompt
+async function getMediaContext(agentId: string): Promise<{ context: string; items: MediaItem[] }> {
+  const result = await query(
+    `SELECT id, name, description, type, file_urls, mime_types FROM agent_media WHERE agent_id = $1`,
+    [agentId]
+  );
+  
+  const items = result.rows as MediaItem[];
+  if (items.length === 0) {
+    return { context: '', items: [] };
+  }
+  
+  const mediaList = items.map((m, i) => 
+    `${i + 1}. [${m.type.toUpperCase()}] "${m.name}" - ${m.description}`
+  ).join('\n');
+  
+  const context = `\n\n## Galeria de Produtos/Mídia Disponível:\n${mediaList}\n\nQuando o usuário perguntar sobre um produto específico, você pode usar a função send_media para enviar fotos ou vídeos relacionados. Use a descrição para identificar qual mídia corresponde à pergunta do usuário.`;
+  
+  return { context, items };
+}
+
+// Tools for media sending
+const mediaTools = [
+  {
+    type: 'function' as const,
+    function: {
+      name: 'send_media',
+      description: 'Envia fotos ou vídeos de produtos para o usuário. Use quando o usuário perguntar sobre um produto específico ou pedir para ver imagens/vídeos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          media_names: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Lista com os nomes exatos das mídias a serem enviadas (conforme listado na galeria)'
+          },
+          message: {
+            type: 'string',
+            description: 'Mensagem de texto para acompanhar as mídias (opcional)'
+          }
+        },
+        required: ['media_names']
+      }
+    }
+  }
+];
+
 export async function generateResponse(
   agent: AgentWithConfig, 
   userMessage: string, 
   phoneNumber: string,
   imageBase64?: string
-): Promise<string> {
+): Promise<ResponseWithMedia> {
   try {
     // Get conversation history
     const historyResult = await query(
@@ -93,9 +154,27 @@ export async function generateResponse(
       .filter(Boolean)
       .join('\n\n');
 
-    const systemPrompt = docsContext 
-      ? `${agent.prompt}\n\nContexto adicional dos documentos:\n${docsContext}`
-      : agent.prompt;
+    // Get media context
+    const { context: mediaContext, items: mediaItems } = await getMediaContext(agent.id);
+
+    // Build system prompt with instructions for natural responses
+    const naturalResponseInstruction = `
+
+IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensagens curtas quando apropriado.
+- Use frases curtas e diretas
+- Não envie blocos grandes de texto
+- Separe ideias diferentes com "---" para que sejam enviadas como mensagens separadas
+- Seja conversacional e amigável`;
+
+    let systemPrompt = agent.prompt + naturalResponseInstruction;
+    
+    if (docsContext) {
+      systemPrompt += `\n\nContexto adicional dos documentos:\n${docsContext}`;
+    }
+    
+    if (mediaContext) {
+      systemPrompt += mediaContext;
+    }
 
     const client = await getAgentOpenAIClient(agent);
     const model = agent.openai_model || process.env.OPENAI_MODEL || 'gpt-4o';
@@ -119,9 +198,61 @@ export async function generateResponse(
         ...history,
         { role: 'user', content: userContent as any },
       ],
+      tools: mediaItems.length > 0 ? mediaTools : undefined,
+      tool_choice: mediaItems.length > 0 ? 'auto' : undefined,
     });
 
-    return response.choices[0]?.message?.content || 'Desculpe, não consegui gerar uma resposta.';
+    const message = response.choices[0]?.message;
+    let textResponse = message?.content || '';
+    let mediaToSend: MediaItem[] = [];
+
+    // Check for tool calls
+    if (message?.tool_calls && message.tool_calls.length > 0) {
+      for (const toolCall of message.tool_calls) {
+        if (toolCall.function.name === 'send_media') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const mediaNames: string[] = args.media_names || [];
+            const additionalMessage: string = args.message || '';
+            
+            // Find matching media items
+            for (const name of mediaNames) {
+              const found = mediaItems.find(
+                m => m.name.toLowerCase() === name.toLowerCase()
+              );
+              if (found) {
+                mediaToSend.push(found);
+              }
+            }
+            
+            if (additionalMessage) {
+              textResponse = additionalMessage;
+            }
+          } catch (e) {
+            console.error('Error parsing tool call:', e);
+          }
+        }
+      }
+      
+      // If we have media but no text, generate a follow-up
+      if (mediaToSend.length > 0 && !textResponse) {
+        const followUp = await client.chat.completions.create({
+          model,
+          max_completion_tokens: 200,
+          messages: [
+            { role: 'system', content: 'Você está enviando fotos/vídeos de produtos. Gere uma mensagem curta e amigável para acompanhar.' },
+            { role: 'user', content: `Gerando mensagem para: ${mediaToSend.map(m => m.name).join(', ')}` }
+          ]
+        });
+        textResponse = followUp.choices[0]?.message?.content || 'Aqui está o que você pediu! 📸';
+      }
+    }
+
+    if (!textResponse && mediaToSend.length === 0) {
+      textResponse = 'Desculpe, não consegui gerar uma resposta.';
+    }
+
+    return { text: textResponse, mediaToSend };
   } catch (error) {
     console.error('OpenAI error:', error);
     throw error;

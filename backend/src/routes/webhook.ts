@@ -1,9 +1,18 @@
 import { Router } from 'express';
 import { query } from '../services/database.js';
 import { generateResponse, transcribeAudio, analyzeImage } from '../services/openai.js';
-import { sendMessage, downloadMediaForAgent } from '../services/evolution.js';
+import { sendMessage, sendMessagesWithDelay, sendMedia, downloadMediaForAgent } from '../services/evolution.js';
 
 export const webhookRouter = Router();
+
+interface MediaItem {
+  id: string;
+  name: string;
+  description: string;
+  type: 'image' | 'gallery' | 'video';
+  file_urls: string[];
+  mime_types: string[];
+}
 
 interface WebhookPayload {
   instance: string;
@@ -204,13 +213,41 @@ async function processAndRespond(
     console.log(`Responding to ${pendingMessages.rows.length} batched messages for ${phoneNumber}`);
 
     // Generate AI response for all accumulated messages
-    const aiResponse = await generateResponse(agent, combinedMessage, phoneNumber);
+    const aiResult = await generateResponse(agent, combinedMessage, phoneNumber);
+    const { text: aiResponse, mediaToSend } = aiResult;
 
-    // Save agent response
+    // Split response into smaller messages for natural conversation
+    const splitMessages = (text: string): string[] => {
+      // First, split by explicit separator
+      const parts = text.split(/\n*---\n*/);
+      const messages: string[] = [];
+      
+      for (const part of parts) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+        
+        // If message is still long, split by paragraphs
+        if (trimmed.length > 300) {
+          const paragraphs = trimmed.split(/\n\n+/);
+          for (const p of paragraphs) {
+            if (p.trim()) messages.push(p.trim());
+          }
+        } else {
+          messages.push(trimmed);
+        }
+      }
+      
+      return messages.length > 0 ? messages : [text];
+    };
+
+    const messageParts = splitMessages(aiResponse);
+    const fullResponse = messageParts.join('\n\n');
+
+    // Save agent response (full text for history)
     await query(
       `INSERT INTO messages (agent_id, sender, content, phone_number, status, is_from_owner) 
        VALUES ($1, 'agent', $2, $3, 'sent', false)`,
-      [agent.id, aiResponse, phoneNumber]
+      [agent.id, fullResponse, phoneNumber]
     );
 
     // Update conversation activity
@@ -227,10 +264,40 @@ async function processAndRespond(
       [agent.id]
     );
 
-    // Send response via Evolution API
-    await sendMessage(instanceName, phoneNumber, aiResponse, agent);
+    // Send text messages with delay for natural feel
+    await sendMessagesWithDelay(instanceName, phoneNumber, messageParts, agent, 1500);
 
-    console.log(`Batched response sent to ${phoneNumber}`);
+    // Send media items if any
+    if (mediaToSend && mediaToSend.length > 0) {
+      for (const media of mediaToSend) {
+        try {
+          // Small delay between media
+          await new Promise(resolve => setTimeout(resolve, 800));
+          
+          for (let i = 0; i < media.file_urls.length; i++) {
+            const fileUrl = media.file_urls[i];
+            const mimeType = media.mime_types[i] || 'image/jpeg';
+            
+            // Extract base64 from data URL
+            const base64Match = fileUrl.match(/^data:[^;]+;base64,(.+)$/);
+            if (base64Match) {
+              const base64 = base64Match[1];
+              const caption = i === 0 ? media.name : undefined;
+              await sendMedia(instanceName, phoneNumber, base64, mimeType, caption, agent);
+              
+              // Small delay between gallery items
+              if (i < media.file_urls.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+              }
+            }
+          }
+        } catch (mediaError) {
+          console.error(`Error sending media ${media.name}:`, mediaError);
+        }
+      }
+    }
+
+    console.log(`Batched response sent to ${phoneNumber} (${messageParts.length} messages, ${mediaToSend?.length || 0} media)`);
   } catch (error) {
     console.error(`Error processing batched response for ${phoneNumber}:`, error);
   }
