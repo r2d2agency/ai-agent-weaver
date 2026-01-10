@@ -25,24 +25,24 @@ productsRouter.get('/:agentId', async (req, res) => {
 productsRouter.post('/:agentId', async (req, res) => {
   try {
     const { agentId } = req.params;
-    const { name, description, price, category, sku, stock, is_active } = req.body;
+    const { name, description, price, category, sku, stock, image_url, is_active } = req.body;
 
     if (!name || price === undefined) {
       return res.status(400).json({ error: 'Name and price are required' });
     }
 
     const result = await query(
-      `INSERT INTO agent_products (agent_id, name, description, price, category, sku, stock, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO agent_products (agent_id, name, description, price, category, sku, stock, image_url, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [agentId, name, description || '', parseFloat(price), category || null, sku || null, stock ?? null, is_active !== false]
+      [agentId, name, description || '', parseFloat(price), category || null, sku || null, stock ?? null, image_url || null, is_active !== false]
     );
 
     await createLog(
       agentId,
       'info',
       'product_created',
-      { productName: name, price }
+      { productName: name, price, hasImage: !!image_url }
     );
 
     res.status(201).json(result.rows[0]);
@@ -52,11 +52,12 @@ productsRouter.post('/:agentId', async (req, res) => {
   }
 });
 
+
 // Update a product
 productsRouter.put('/:agentId/:productId', async (req, res) => {
   try {
     const { agentId, productId } = req.params;
-    const { name, description, price, category, sku, stock, is_active } = req.body;
+    const { name, description, price, category, sku, stock, image_url, is_active } = req.body;
 
     const result = await query(
       `UPDATE agent_products 
@@ -66,11 +67,12 @@ productsRouter.put('/:agentId/:productId', async (req, res) => {
            category = $4,
            sku = $5,
            stock = $6,
-           is_active = COALESCE($7, is_active),
+           image_url = $7,
+           is_active = COALESCE($8, is_active),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $8 AND agent_id = $9
+       WHERE id = $9 AND agent_id = $10
        RETURNING *`,
-      [name, description, price !== undefined ? parseFloat(price) : null, category, sku, stock, is_active, productId, agentId]
+      [name, description, price !== undefined ? parseFloat(price) : null, category, sku, stock, image_url, is_active, productId, agentId]
     );
 
     if (result.rows.length === 0) {
@@ -83,6 +85,7 @@ productsRouter.put('/:agentId/:productId', async (req, res) => {
     res.status(500).json({ error: 'Failed to update product' });
   }
 });
+
 
 // Delete a product
 productsRouter.delete('/:agentId/:productId', async (req, res) => {
@@ -120,10 +123,10 @@ productsRouter.post('/:agentId/bulk', async (req, res) => {
       if (!product.name || product.price === undefined) continue;
       
       const result = await query(
-        `INSERT INTO agent_products (agent_id, name, description, price, category, sku, stock)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO agent_products (agent_id, name, description, price, category, sku, stock, image_url)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`,
-        [agentId, product.name, product.description || '', parseFloat(product.price), product.category || null, product.sku || null, product.stock ?? null]
+        [agentId, product.name, product.description || '', parseFloat(product.price), product.category || null, product.sku || null, product.stock ?? null, product.image_url || null]
       );
       inserted.push(result.rows[0]);
     }
@@ -143,3 +146,4 @@ productsRouter.post('/:agentId/bulk', async (req, res) => {
 });
 
 export { productsRouter };
+

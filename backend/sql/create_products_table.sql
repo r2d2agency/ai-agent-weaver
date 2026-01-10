@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS agent_products (
   category VARCHAR(100),
   sku VARCHAR(100),
   stock INTEGER,
+  image_url TEXT,
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -17,3 +18,4 @@ CREATE TABLE IF NOT EXISTS agent_products (
 CREATE INDEX IF NOT EXISTS idx_agent_products_agent_id ON agent_products(agent_id);
 CREATE INDEX IF NOT EXISTS idx_agent_products_category ON agent_products(category);
 CREATE INDEX IF NOT EXISTS idx_agent_products_name ON agent_products(name);
+

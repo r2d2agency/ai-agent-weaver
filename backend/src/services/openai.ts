@@ -183,8 +183,10 @@ interface ProductItem {
   category: string | null;
   sku: string | null;
   stock: number | null;
+  image_url: string | null;
   is_active: boolean;
 }
+
 
 
 // Get products context for agent prompt
@@ -193,7 +195,7 @@ async function getProductsContext(agentId: string): Promise<{ context: string; i
 
   try {
     const result = await query(
-      `SELECT id, name, description, price, category, sku, stock, is_active 
+      `SELECT id, name, description, price, category, sku, stock, image_url, is_active 
        FROM agent_products 
        WHERE agent_id = $1 AND is_active = true 
        ORDER BY category, name`,
@@ -201,6 +203,7 @@ async function getProductsContext(agentId: string): Promise<{ context: string; i
     );
 
     items = result.rows as ProductItem[];
+
   } catch (error) {
     // If the table doesn't exist yet (migration not applied) or any DB issue occurs,
     // don't break the whole AI flow.
@@ -226,9 +229,10 @@ async function getProductsContext(agentId: string): Promise<{ context: string; i
     productList += `\n### ${category}:\n`;
     for (const p of products) {
       const stockInfo = p.stock !== null ? ` (Estoque: ${p.stock})` : '';
+      const imageInfo = p.image_url ? ' 📷' : '';
       const priceNumber = typeof p.price === 'number' ? p.price : parseFloat(String(p.price));
       const priceLabel = Number.isFinite(priceNumber) ? priceNumber.toFixed(2) : '0.00';
-      productList += `- "${p.name}" - R$ ${priceLabel}${stockInfo}\n`;
+      productList += `- "${p.name}" - R$ ${priceLabel}${stockInfo}${imageInfo}\n`;
       if (p.description) productList += `  Descrição: ${p.description}\n`;
     }
   }
@@ -242,11 +246,14 @@ async function getProductsContext(agentId: string): Promise<{ context: string; i
 3. Se o cliente perguntar preço, informe o valor unitário do catálogo acima.
 4. Para pedidos, some os valores usando calculate_order passando a lista de produtos e quantidades.
 5. Se um produto não estiver no catálogo, informe que não está disponível.
+6. Produtos com 📷 possuem foto - use a função "send_product_image" para enviar a imagem quando o cliente perguntar sobre o produto ou pedir para ver.
 
-Exemplo de uso: calculate_order com items: [{"name": "Produto X", "quantity": 2}, {"name": "Produto Y", "quantity": 1}]`;
+Exemplo de uso: calculate_order com items: [{"name": "Produto X", "quantity": 2}, {"name": "Produto Y", "quantity": 1}]
+Exemplo de imagem: send_product_image com product_name: "Produto X"`;
   
   return { context, items };
 }
+
 
 // Tool for calculating orders
 const calculateOrderTool = {
@@ -281,6 +288,29 @@ const calculateOrderTool = {
   }
 };
 
+// Tool for sending product images from catalog
+const sendProductImageTool = {
+  type: 'function' as const,
+  function: {
+    name: 'send_product_image',
+    description: 'Envia a foto de um produto do catálogo para o usuário. Use quando o cliente perguntar sobre um produto específico que possui foto (marcado com 📷) ou pedir para ver a imagem do produto.',
+    parameters: {
+      type: 'object',
+      properties: {
+        product_name: {
+          type: 'string',
+          description: 'Nome do produto conforme listado no catálogo'
+        },
+        message: {
+          type: 'string',
+          description: 'Mensagem de texto para acompanhar a imagem (opcional)'
+        }
+      },
+      required: ['product_name']
+    }
+  }
+};
+
 // Tools for media sending
 const mediaTools = [
   {
@@ -306,6 +336,7 @@ const mediaTools = [
     }
   }
 ];
+
 
 // Tool for notifying a human operator
 const notifyHumanTool = {
@@ -536,11 +567,17 @@ Inclua também a mensagem atual do cliente no conversation_history.
     }
     if (productItems.length > 0) {
       availableTools.push(calculateOrderTool);
+      // Add send_product_image tool if any product has an image
+      const hasProductImages = productItems.some(p => p.image_url);
+      if (hasProductImages) {
+        availableTools.push(sendProductImageTool);
+      }
     }
     if (agent.notification_number) {
       availableTools.push(notifyHumanTool);
       availableTools.push(collectInfoTool);
     }
+
 
     let response: any;
     try {
@@ -820,7 +857,66 @@ Inclua também a mensagem atual do cliente no conversation_history.
             await createLog(agent.id, 'error', 'Erro ao processar calculate_order', { error: String(e) }, phoneNumber, 'whatsapp');
           }
         }
+
+        // Handle send_product_image tool call
+        if (toolCall.function.name === 'send_product_image') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const productName: string = args.product_name || '';
+            const additionalMessage: string = args.message || '';
+
+            console.log('=== send_product_image Tool Call ===');
+            console.log('Product name:', productName);
+
+            // Find matching product with image
+            const product = productItems.find(
+              p => p.name.toLowerCase() === productName.toLowerCase() ||
+                   p.name.toLowerCase().includes(productName.toLowerCase()) ||
+                   productName.toLowerCase().includes(p.name.toLowerCase())
+            );
+
+            if (product && product.image_url) {
+              // Add to mediaToSend as a synthetic media item
+              const productMedia: MediaItem = {
+                id: product.id,
+                name: product.name,
+                description: product.description || '',
+                type: 'image',
+                file_urls: [product.image_url],
+                mime_types: ['image/jpeg'], // assume jpeg for simplicity
+              };
+              mediaToSend.push(productMedia);
+
+              const priceNumber = typeof product.price === 'number' ? product.price : parseFloat(String(product.price));
+              const priceLabel = Number.isFinite(priceNumber) ? `R$ ${priceNumber.toFixed(2)}` : '';
+
+              toolSuggestedMessage = additionalMessage || `Aqui está a foto do ${product.name}${priceLabel ? ` - ${priceLabel}` : ''}! 📷`;
+
+              await createLog(
+                agent.id,
+                'tool_call',
+                `Tool: send_product_image - ${product.name}`,
+                {
+                  productName: product.name,
+                  imageUrl: product.image_url,
+                },
+                phoneNumber,
+                'whatsapp'
+              );
+            } else if (product) {
+              toolSuggestedMessage = `O produto ${product.name} não possui foto cadastrada no momento.`;
+              console.log(`✗ Product found but no image: ${product.name}`);
+            } else {
+              toolSuggestedMessage = `Desculpe, não encontrei o produto "${productName}" no catálogo.`;
+              console.log(`✗ Product not found: ${productName}`);
+            }
+          } catch (e) {
+            console.error('Error parsing send_product_image tool call:', e);
+            await createLog(agent.id, 'error', 'Erro ao processar send_product_image', { error: String(e) }, phoneNumber, 'whatsapp');
+          }
+        }
       }
+
 
       // Handle response based on tool calls
       if (notifyHuman) {
@@ -945,10 +1041,16 @@ Inclua também a mensagem atual do cliente no conversation_history.
     }
     if (productItems.length > 0) {
       availableTools.push(calculateOrderTool);
+      // Add send_product_image tool if any product has an image
+      const hasProductImages = productItems.some(p => p.image_url);
+      if (hasProductImages) {
+        availableTools.push(sendProductImageTool);
+      }
     }
     if (agent.notification_number) {
       availableTools.push(notifyHumanTool);
     }
+
 
     let response: any;
     try {
@@ -1055,6 +1157,33 @@ Inclua também a mensagem atual do cliente no conversation_history.
           }
         }
 
+        if (toolCall.function.name === 'send_product_image') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const productName: string = args.product_name || '';
+            const additionalMessage: string = args.message || '';
+
+            const product = productItems.find(
+              p =>
+                p.name.toLowerCase() === productName.toLowerCase() ||
+                p.name.toLowerCase().includes(productName.toLowerCase()) ||
+                productName.toLowerCase().includes(p.name.toLowerCase())
+            );
+
+            if (product && product.image_url) {
+              const priceNumber = typeof product.price === 'number' ? product.price : parseFloat(String(product.price));
+              const priceLabel = Number.isFinite(priceNumber) ? `R$ ${priceNumber.toFixed(2)}` : '';
+              textResponse = additionalMessage || `[Enviando foto: ${product.name}${priceLabel ? ` - ${priceLabel}` : ''}] 📷`;
+            } else if (product) {
+              textResponse = `O produto ${product.name} não possui foto cadastrada.`;
+            } else {
+              textResponse = `Produto "${productName}" não encontrado no catálogo.`;
+            }
+          } catch (e) {
+            console.error('Error parsing send_product_image tool call (test):', e);
+          }
+        }
+
         if (toolCall.function.name === 'notify_human') {
           try {
             const args = JSON.parse(toolCall.function.arguments);
@@ -1078,6 +1207,7 @@ Inclua também a mensagem atual do cliente no conversation_history.
         }
       }
     }
+
 
     return textResponse || 'Desculpe, não consegui gerar uma resposta.';
   } catch (error) {
