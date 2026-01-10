@@ -313,7 +313,7 @@ Ao usar notify_human, forneça:
     const message = response.choices[0]?.message;
     let textResponse = message?.content || '';
     let mediaToSend: MediaItem[] = [];
-    let notifyHuman: ResponseWithMedia['notifyHuman'] = undefined;
+    let notifyHuman: ResponseWithMedia['notifyHuman'];
 
     // Check for tool calls
     console.log('=== OpenAI Response Debug ===');
