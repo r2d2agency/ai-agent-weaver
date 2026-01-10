@@ -152,6 +152,29 @@ export async function initDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
+      -- FAQ table for frequently asked questions
+      CREATE TABLE IF NOT EXISTS agent_faqs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agent_id UUID REFERENCES agents(id) ON DELETE CASCADE NOT NULL,
+        question TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        keywords TEXT[] DEFAULT '{}',
+        usage_count INTEGER DEFAULT 0,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- FAQ usage log for analytics
+      CREATE TABLE IF NOT EXISTS faq_usage_log (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        faq_id UUID REFERENCES agent_faqs(id) ON DELETE CASCADE NOT NULL,
+        agent_id UUID REFERENCES agents(id) ON DELETE CASCADE NOT NULL,
+        session_id VARCHAR(255),
+        source VARCHAR(20) DEFAULT 'widget', -- 'widget' or 'whatsapp'
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
       -- Add new columns if they don't exist (for existing databases)
       DO $$ 
       BEGIN 
