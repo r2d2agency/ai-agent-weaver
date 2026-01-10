@@ -21,6 +21,8 @@ export async function initDatabase() {
         token VARCHAR(255),
         messages_count INTEGER DEFAULT 0,
         audio_enabled BOOLEAN DEFAULT true,
+        image_enabled BOOLEAN DEFAULT true,
+        document_enabled BOOLEAN DEFAULT true,
         widget_enabled BOOLEAN DEFAULT false,
         ghost_mode BOOLEAN DEFAULT false,
         takeover_timeout INTEGER DEFAULT 60,
@@ -32,6 +34,8 @@ export async function initDatabase() {
         operating_hours_end TIME DEFAULT '18:00',
         operating_hours_timezone VARCHAR(50) DEFAULT 'America/Sao_Paulo',
         out_of_hours_message TEXT DEFAULT 'Olá! Nosso horário de atendimento é das 09:00 às 18:00. Deixe sua mensagem que responderemos assim que possível! 🕐',
+        openai_api_key VARCHAR(255),
+        openai_model VARCHAR(100) DEFAULT 'gpt-4o',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -164,6 +168,18 @@ export async function initDatabase() {
         END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='out_of_hours_message') THEN
           ALTER TABLE agents ADD COLUMN out_of_hours_message TEXT DEFAULT 'Olá! Nosso horário de atendimento é das 09:00 às 18:00. Deixe sua mensagem que responderemos assim que possível! 🕐';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='image_enabled') THEN
+          ALTER TABLE agents ADD COLUMN image_enabled BOOLEAN DEFAULT true;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='document_enabled') THEN
+          ALTER TABLE agents ADD COLUMN document_enabled BOOLEAN DEFAULT true;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='openai_api_key') THEN
+          ALTER TABLE agents ADD COLUMN openai_api_key VARCHAR(255);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='openai_model') THEN
+          ALTER TABLE agents ADD COLUMN openai_model VARCHAR(100) DEFAULT 'gpt-4o';
         END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='is_audio') THEN
           ALTER TABLE messages ADD COLUMN is_audio BOOLEAN DEFAULT false;
