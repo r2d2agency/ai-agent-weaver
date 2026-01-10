@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { query } from '../services/database.js';
-import { generateResponse, transcribeAudio, analyzeImage } from '../services/openai.js';
-import { sendMessage, sendMessagesWithDelay, sendMedia, downloadMediaForAgent } from '../services/evolution.js';
+import { generateResponse, transcribeAudio, analyzeImage, textToSpeech } from '../services/openai.js';
+import { sendMessage, sendMessagesWithDelay, sendMedia, sendAudio, downloadMediaForAgent } from '../services/evolution.js';
 import { createLog } from './logs.js';
 
 export const webhookRouter = Router();
@@ -78,7 +78,8 @@ setInterval(() => {
 async function processAndRespond(
   agentId: string,
   phoneNumber: string,
-  instanceName: string
+  instanceName: string,
+  respondWithAudio: boolean = false
 ) {
   let agent: any = null;
   try {
@@ -266,8 +267,58 @@ async function processAndRespond(
       [agent.id]
     );
 
-    // Send text messages with delay for natural feel
-    await sendMessagesWithDelay(instanceName, phoneNumber, messageParts, agent, 1500);
+    // Check if we should respond with audio
+    const shouldRespondWithAudio = respondWithAudio && agent.audio_response_enabled === true;
+    
+    if (shouldRespondWithAudio) {
+      // Generate TTS audio for the response
+      try {
+        console.log(`Generating audio response for ${phoneNumber}`);
+        
+        await createLog(
+          agent.id,
+          'info',
+          'Gerando resposta em áudio',
+          { voice: agent.audio_response_voice || 'nova', textLength: fullResponse.length },
+          phoneNumber,
+          'whatsapp'
+        );
+        
+        const audioBuffer = await textToSpeech(agent, fullResponse);
+        const audioBase64 = audioBuffer.toString('base64');
+        
+        // Send audio via Evolution API
+        await sendAudio(instanceName, phoneNumber, audioBase64, agent);
+        
+        console.log(`Audio response sent to ${phoneNumber}`);
+        
+        await createLog(
+          agent.id,
+          'info',
+          'Resposta em áudio enviada com sucesso',
+          { audioSize: audioBuffer.length },
+          phoneNumber,
+          'whatsapp'
+        );
+      } catch (audioError: any) {
+        console.error('Failed to send audio response, falling back to text:', audioError);
+        
+        await createLog(
+          agent.id,
+          'error',
+          'Falha ao enviar áudio, enviando texto',
+          { error: audioError.message },
+          phoneNumber,
+          'whatsapp'
+        );
+        
+        // Fallback to text messages
+        await sendMessagesWithDelay(instanceName, phoneNumber, messageParts, agent, 1500);
+      }
+    } else {
+      // Send text messages with delay for natural feel
+      await sendMessagesWithDelay(instanceName, phoneNumber, messageParts, agent, 1500);
+    }
 
     // Send media items if any
     if (mediaToSend && mediaToSend.length > 0) {
@@ -641,6 +692,9 @@ webhookRouter.post('/:instanceName', async (req, res) => {
     // Schedule delayed response (reset timer if already pending)
     const pendingKey = `${agent.id}:${phoneNumber}`;
     
+    // Store whether the last message was audio for audio response logic
+    const shouldRespondWithAudio = isAudioMessage;
+    
     if (pendingResponses.has(pendingKey)) {
       clearTimeout(pendingResponses.get(pendingKey)!);
       console.log(`Reset response timer for ${phoneNumber}`);
@@ -648,12 +702,12 @@ webhookRouter.post('/:instanceName', async (req, res) => {
 
     const timeout = setTimeout(() => {
       pendingResponses.delete(pendingKey);
-      processAndRespond(agent.id, phoneNumber, instanceName);
+      processAndRespond(agent.id, phoneNumber, instanceName, shouldRespondWithAudio);
     }, RESPONSE_DELAY_MS);
 
     pendingResponses.set(pendingKey, timeout);
 
-    console.log(`Message saved, response scheduled in ${RESPONSE_DELAY_MS / 1000}s for ${phoneNumber}`);
+    console.log(`Message saved, response scheduled in ${RESPONSE_DELAY_MS / 1000}s for ${phoneNumber} (audioResponse: ${shouldRespondWithAudio})`);
     res.status(200).json({ status: 'ok', messageId: payload.data.key.id, scheduled: true });
   } catch (error) {
     console.error('Webhook error:', error);

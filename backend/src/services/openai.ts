@@ -50,6 +50,8 @@ interface Agent {
 interface AgentWithConfig extends Agent {
   openai_api_key?: string;
   openai_model?: string;
+  audio_response_enabled?: boolean;
+  audio_response_voice?: string;
 }
 
 interface HistoryMessage {
@@ -553,6 +555,36 @@ export async function generateWidgetResponse(agent: AgentWithConfig, userMessage
     return response.choices[0]?.message?.content || 'Desculpe, não consegui gerar uma resposta.';
   } catch (error) {
     console.error('OpenAI widget error:', error);
+    throw error;
+  }
+}
+
+// Text-to-Speech using OpenAI TTS
+export async function textToSpeech(
+  agent: AgentWithConfig, 
+  text: string
+): Promise<Buffer> {
+  try {
+    const client = await getAgentOpenAIClient(agent);
+    
+    // Use agent-specific voice or default to 'nova' (female)
+    // Available voices: alloy, echo, fable, onyx, nova, shimmer
+    // Male voices: echo, onyx, fable
+    // Female voices: alloy, nova, shimmer
+    const voice = agent.audio_response_voice || 'nova';
+    
+    const response = await client.audio.speech.create({
+      model: 'tts-1',
+      voice: voice as 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer',
+      input: text,
+      response_format: 'mp3',
+    });
+    
+    // Convert the response to a buffer
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (error) {
+    console.error('TTS error:', error);
     throw error;
   }
 }

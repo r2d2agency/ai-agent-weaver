@@ -167,6 +167,53 @@ export async function sendMedia(
   }
 }
 
+// Send audio via Evolution API (PTT - push to talk)
+export async function sendAudio(
+  instanceName: string, 
+  phoneNumber: string, 
+  audioBase64: string,
+  agent?: any
+) {
+  try {
+    const { apiUrl, apiKey } = agent 
+      ? await getAgentEvolutionCredentials(agent)
+      : await getEvolutionCredentials();
+
+    // Evolution API expects raw base64 string (not a data URL)
+    const normalizedBase64 = (() => {
+      const match = String(audioBase64 || '').match(/^data:[^;]+;base64,(.+)$/);
+      return match ? match[1] : String(audioBase64 || '');
+    })();
+
+    console.log(
+      `Sending audio via Evolution API: ${apiUrl}, instance: ${instanceName}, base64Length: ${normalizedBase64.length}`
+    );
+
+    // Evolution API v2 uses sendWhatsAppAudio for PTT audio messages
+    const response = await axios.post(
+      `${apiUrl}/message/sendWhatsAppAudio/${instanceName}`,
+      {
+        number: phoneNumber,
+        audio: normalizedBase64,
+        encoding: true, // indicates base64 encoding
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': apiKey,
+        },
+        timeout: 60000,
+      }
+    );
+
+    console.log(`Audio sent successfully via Evolution API`);
+    return response.data;
+  } catch (error: any) {
+    console.error('Evolution API send audio error:', error.response?.data || error.message);
+    throw error;
+  }
+}
+
 export async function downloadMediaForAgent(instanceName: string, messageId: string, agent: any): Promise<string | null> {
   try {
     const { apiUrl, apiKey } = await getAgentEvolutionCredentials(agent);
