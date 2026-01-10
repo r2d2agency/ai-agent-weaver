@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Save, Eye, EyeOff, Key, Globe, Cpu, Database } from 'lucide-react';
+import { Save, Eye, EyeOff, Key, Globe, Cpu, Database, CheckCircle, XCircle, Loader2, MessageSquare } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Input } from '@/components/ui/input';
@@ -15,9 +15,13 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Settings } from '@/types/agent';
+import { API_BASE_URL, getSettings, updateSettings } from '@/lib/api';
+import { TestAgentModal } from '@/components/agents/TestAgentModal';
+import { useAgents } from '@/hooks/use-agents';
 
 const SettingsPage = () => {
   const { toast } = useToast();
+  const { data: agents } = useAgents();
   const [showKeys, setShowKeys] = useState({
     openai: false,
     evolution: false,
@@ -30,13 +34,174 @@ const SettingsPage = () => {
     defaultModel: 'gpt-4o-mini',
   });
 
-  const handleSave = () => {
-    // Here you would save to database
-    toast({
-      title: 'Configurações salvas!',
-      description: 'Suas configurações foram atualizadas com sucesso.',
-    });
+  const [testingOpenAI, setTestingOpenAI] = useState(false);
+  const [testingEvolution, setTestingEvolution] = useState(false);
+  const [openAIStatus, setOpenAIStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [evolutionStatus, setEvolutionStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const [testAgentModalOpen, setTestAgentModalOpen] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<any>(null);
+
+  // Load settings on mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const data = await getSettings();
+        setSettings({
+          openaiApiKey: data.openai_api_key || '',
+          evolutionApiUrl: data.evolution_api_url || '',
+          evolutionApiKey: data.evolution_api_key || '',
+          defaultModel: data.default_model || 'gpt-4o-mini',
+        });
+      } catch (error) {
+        console.error('Error loading settings:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadSettings();
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await updateSettings({
+        openai_api_key: settings.openaiApiKey,
+        evolution_api_url: settings.evolutionApiUrl,
+        evolution_api_key: settings.evolutionApiKey,
+        default_model: settings.defaultModel,
+      });
+      toast({
+        title: 'Configurações salvas!',
+        description: 'Suas configurações foram atualizadas com sucesso.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Erro ao salvar',
+        description: 'Não foi possível salvar as configurações.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const handleTestOpenAI = async () => {
+    if (!settings.openaiApiKey) {
+      toast({
+        title: 'API Key necessária',
+        description: 'Insira a API Key da OpenAI para testar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setTestingOpenAI(true);
+    setOpenAIStatus('idle');
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/settings/test-openai`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: settings.openaiApiKey }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setOpenAIStatus('success');
+        toast({
+          title: 'Conexão bem-sucedida!',
+          description: 'A API da OpenAI está funcionando corretamente.',
+        });
+      } else {
+        setOpenAIStatus('error');
+        toast({
+          title: 'Falha na conexão',
+          description: data.error || 'Verifique sua API Key.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      setOpenAIStatus('error');
+      toast({
+        title: 'Erro de conexão',
+        description: 'Não foi possível conectar à API.',
+        variant: 'destructive',
+      });
+    } finally {
+      setTestingOpenAI(false);
+    }
+  };
+
+  const handleTestEvolution = async () => {
+    if (!settings.evolutionApiUrl || !settings.evolutionApiKey) {
+      toast({
+        title: 'Dados necessários',
+        description: 'Insira a URL e API Key da Evolution para testar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setTestingEvolution(true);
+    setEvolutionStatus('idle');
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/settings/test-evolution`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          apiUrl: settings.evolutionApiUrl, 
+          apiKey: settings.evolutionApiKey 
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setEvolutionStatus('success');
+        toast({
+          title: 'Conexão bem-sucedida!',
+          description: `Evolution API conectada. ${data.instances?.length || 0} instância(s) encontrada(s).`,
+        });
+      } else {
+        setEvolutionStatus('error');
+        toast({
+          title: 'Falha na conexão',
+          description: data.error || 'Verifique suas credenciais.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      setEvolutionStatus('error');
+      toast({
+        title: 'Erro de conexão',
+        description: 'Não foi possível conectar à API.',
+        variant: 'destructive',
+      });
+    } finally {
+      setTestingEvolution(false);
+    }
+  };
+
+  const getStatusIcon = (status: 'idle' | 'success' | 'error') => {
+    if (status === 'success') return <CheckCircle className="w-4 h-4 text-success" />;
+    if (status === 'error') return <XCircle className="w-4 h-4 text-destructive" />;
+    return null;
+  };
+
+  if (loading) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
@@ -52,14 +217,17 @@ const SettingsPage = () => {
           animate={{ opacity: 1, y: 0 }}
           className="glass-card p-6"
         >
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-              <Cpu className="w-5 h-5 text-primary" />
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Cpu className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-foreground">OpenAI</h2>
+                <p className="text-sm text-muted-foreground">Configurações da API OpenAI</p>
+              </div>
             </div>
-            <div>
-              <h2 className="font-semibold text-foreground">OpenAI</h2>
-              <p className="text-sm text-muted-foreground">Configurações da API OpenAI</p>
-            </div>
+            {getStatusIcon(openAIStatus)}
           </div>
 
           <div className="space-y-4">
@@ -103,6 +271,25 @@ const SettingsPage = () => {
                 </SelectContent>
               </Select>
             </div>
+
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={handleTestOpenAI}
+              disabled={testingOpenAI}
+            >
+              {testingOpenAI ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Testando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Testar Conexão OpenAI
+                </>
+              )}
+            </Button>
           </div>
         </motion.div>
 
@@ -113,14 +300,17 @@ const SettingsPage = () => {
           transition={{ delay: 0.1 }}
           className="glass-card p-6"
         >
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center">
-              <Globe className="w-5 h-5 text-success" />
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center">
+                <Globe className="w-5 h-5 text-success" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-foreground">Evolution API</h2>
+                <p className="text-sm text-muted-foreground">Conexão com WhatsApp</p>
+              </div>
             </div>
-            <div>
-              <h2 className="font-semibold text-foreground">Evolution API</h2>
-              <p className="text-sm text-muted-foreground">Conexão com WhatsApp</p>
-            </div>
+            {getStatusIcon(evolutionStatus)}
           </div>
 
           <div className="space-y-4">
@@ -157,6 +347,77 @@ const SettingsPage = () => {
                 </Button>
               </div>
             </div>
+
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={handleTestEvolution}
+              disabled={testingEvolution}
+            >
+              {testingEvolution ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Testando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Testar Conexão Evolution
+                </>
+              )}
+            </Button>
+          </div>
+        </motion.div>
+
+        {/* Test Agent Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="glass-card p-6"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center">
+              <MessageSquare className="w-5 h-5 text-warning" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-foreground">Testar Agente</h2>
+              <p className="text-sm text-muted-foreground">Simule conversas com seus agentes</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Selecionar Agente</Label>
+              <Select 
+                value={selectedAgent?.id || ''}
+                onValueChange={(value) => {
+                  const agent = agents?.find((a: any) => a.id === value);
+                  setSelectedAgent(agent || null);
+                }}
+              >
+                <SelectTrigger className="bg-muted border-border">
+                  <SelectValue placeholder="Escolha um agente para testar" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  {agents?.map((agent: any) => (
+                    <SelectItem key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={() => setTestAgentModalOpen(true)}
+              disabled={!selectedAgent}
+            >
+              <MessageSquare className="w-4 h-4 mr-2" />
+              Abrir Chat de Teste
+            </Button>
           </div>
         </motion.div>
 
@@ -192,12 +453,22 @@ const SettingsPage = () => {
           transition={{ delay: 0.3 }}
           className="flex justify-end"
         >
-          <Button className="btn-primary-gradient" onClick={handleSave}>
-            <Save className="w-4 h-4 mr-2" />
+          <Button className="btn-primary-gradient" onClick={handleSave} disabled={saving}>
+            {saving ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4 mr-2" />
+            )}
             Salvar Configurações
           </Button>
         </motion.div>
       </div>
+
+      <TestAgentModal
+        open={testAgentModalOpen}
+        onOpenChange={setTestAgentModalOpen}
+        agent={selectedAgent}
+      />
     </MainLayout>
   );
 };
