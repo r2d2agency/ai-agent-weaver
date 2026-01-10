@@ -532,28 +532,133 @@ export async function generateTestResponse(agent: AgentWithConfig, userMessage: 
       .filter(Boolean)
       .join('\n\n');
 
+    // Get media context
+    const { context: mediaContext, items: mediaItems } = await getMediaContext(agent.id);
+
     // Add date/time context to test responses too
     const dateTimeContext = getDateTimeContext();
-    const basePrompt = agent.prompt + dateTimeContext;
+    let systemPrompt = agent.prompt + dateTimeContext;
     
-    const systemPrompt = docsContext 
-      ? `${basePrompt}\n\nContexto adicional dos documentos:\n${docsContext}`
-      : basePrompt;
+    if (docsContext) {
+      systemPrompt += `\n\nContexto adicional dos documentos:\n${docsContext}`;
+    }
+    
+    if (mediaContext) {
+      systemPrompt += mediaContext;
+    }
+
+    // Build conversation history summary for notify_human
+    const historyForSummary = history
+      .map((msg) => `${msg.role === 'user' ? 'Cliente' : 'Agente'}: ${msg.content}`)
+      .join('\n');
+
+    // Add notify_human context if notification number is configured
+    if (agent.notification_number) {
+      systemPrompt += `\n\n## Transferência para Atendente Humano:
+Você tem a capacidade de notificar um atendente humano via WhatsApp quando necessário.
+Use a função "notify_human" quando:
+- O cliente pedir explicitamente para falar com um humano
+- Você não conseguir resolver o problema do cliente
+- A situação for complexa e requer análise humana
+- O cliente estiver insatisfeito ou frustrado
+
+IMPORTANTE: Ao usar notify_human, forneça:
+- reason: Motivo claro e conciso da transferência
+- summary: Histórico completo da conversa, incluindo TODAS as mensagens abaixo:
+
+${historyForSummary}
+
+Inclua também a mensagem atual do cliente no summary.
+- customer_name: Nome do cliente se mencionado na conversa`;
+    }
 
     const client = await getAgentOpenAIClient(agent);
     const model = agent.openai_model || process.env.OPENAI_MODEL || 'gpt-4o';
     
-    const response = await client.chat.completions.create({
-      model,
-      max_completion_tokens: 1000,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...history.map(msg => ({ role: msg.role, content: msg.content })),
-        { role: 'user', content: userMessage },
-      ],
-    });
+    // Build tools array based on agent configuration
+    const availableTools: any[] = [];
+    if (mediaItems.length > 0) {
+      availableTools.push(...mediaTools);
+    }
+    if (agent.notification_number) {
+      availableTools.push(notifyHumanTool);
+    }
 
-    return response.choices[0]?.message?.content || 'Desculpe, não consegui gerar uma resposta.';
+    let response: any;
+    try {
+      response = await client.chat.completions.create({
+        model,
+        max_completion_tokens: 1000,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...history.map(msg => ({ role: msg.role, content: msg.content })),
+          { role: 'user', content: userMessage },
+        ],
+        tools: availableTools.length > 0 ? availableTools : undefined,
+        tool_choice: availableTools.length > 0 ? 'auto' : undefined,
+      });
+    } catch (err) {
+      // Fallback without tools if it fails
+      console.error('OpenAI test create failed (retrying without tools):', err);
+      response = await client.chat.completions.create({
+        model,
+        max_completion_tokens: 1000,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...history.map(msg => ({ role: msg.role, content: msg.content })),
+          { role: 'user', content: userMessage },
+        ],
+      });
+    }
+
+    const message = response.choices[0]?.message;
+    let textResponse = message?.content || '';
+
+    // Check for tool calls
+    if (message?.tool_calls && message.tool_calls.length > 0) {
+      for (const toolCall of message.tool_calls) {
+        if (toolCall.function.name === 'send_media') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const mediaNames: string[] = args.media_names || [];
+            const additionalMessage: string = args.message || '';
+            
+            // Find matching media items
+            const matchedMedia: string[] = [];
+            for (const name of mediaNames) {
+              const found = mediaItems.find(
+                m =>
+                  m.name.toLowerCase().includes(String(name).toLowerCase()) ||
+                  String(name).toLowerCase().includes(m.name.toLowerCase())
+              );
+              if (found) {
+                matchedMedia.push(found.name);
+              }
+            }
+            
+            if (matchedMedia.length > 0) {
+              textResponse = additionalMessage || `[Enviando mídia: ${matchedMedia.join(', ')}]`;
+            } else {
+              textResponse = additionalMessage || 'Desculpe, não encontrei a mídia solicitada.';
+            }
+          } catch (e) {
+            console.error('Error parsing send_media tool call:', e);
+          }
+        }
+        
+        if (toolCall.function.name === 'notify_human') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            textResponse = `🔔 **Transferência para Humano Solicitada**\n\n**Motivo:** ${args.reason}\n\n**Resumo:** ${args.summary}${args.customer_name ? `\n\n**Nome do cliente:** ${args.customer_name}` : ''}`;
+          } catch (e) {
+            console.error('Error parsing notify_human tool call:', e);
+            textResponse = '🔔 Transferência para atendente humano solicitada.';
+          }
+        }
+      }
+    }
+
+    return textResponse || 'Desculpe, não consegui gerar uma resposta.';
   } catch (error) {
     console.error('OpenAI test error:', error);
     throw error;
