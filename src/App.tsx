@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import Agents from "./pages/Agents";
 import AgentDetails from "./pages/AgentDetails";
 import Messages from "./pages/Messages";
+import Logs from "./pages/Logs";
 import Webhooks from "./pages/Webhooks";
 import Documents from "./pages/Documents";
 import Settings from "./pages/Settings";
@@ -63,6 +64,7 @@ function AppRoutes() {
       <Route path="/agents" element={<ProtectedRoute><Agents /></ProtectedRoute>} />
       <Route path="/agents/:id" element={<ProtectedRoute><AgentDetails /></ProtectedRoute>} />
       <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} />
+      <Route path="/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
       <Route path="/webhooks" element={<ProtectedRoute><Webhooks /></ProtectedRoute>} />
       <Route path="/documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />

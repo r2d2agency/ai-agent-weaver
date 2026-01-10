@@ -175,6 +175,18 @@ export async function initDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
+      -- System logs for debugging and monitoring
+      CREATE TABLE IF NOT EXISTS system_logs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agent_id UUID REFERENCES agents(id) ON DELETE CASCADE,
+        log_type VARCHAR(50) NOT NULL, -- 'tool_call', 'media_send', 'error', 'info'
+        action VARCHAR(100) NOT NULL,
+        details JSONB DEFAULT '{}',
+        phone_number VARCHAR(50),
+        source VARCHAR(20) DEFAULT 'whatsapp', -- 'whatsapp' or 'widget'
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
       -- Add new columns if they don't exist (for existing databases)
       DO $$ 
       BEGIN 
