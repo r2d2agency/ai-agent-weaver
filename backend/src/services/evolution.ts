@@ -102,6 +102,11 @@ export async function sendMedia(
       : await getEvolutionCredentials();
     
     const isVideo = mimeType.includes('video');
+    const isDocument = mimeType.includes('pdf') || 
+                       mimeType.includes('powerpoint') || 
+                       mimeType.includes('presentation') ||
+                       mimeType.includes('msword') ||
+                       mimeType.includes('document');
 
     // Evolution API expects either a public URL OR a raw base64 string (not a data URL)
     const normalizedBase64 = (() => {
@@ -110,19 +115,40 @@ export async function sendMedia(
     })();
 
     console.log(
-      `Sending media via Evolution API: ${apiUrl}, instance: ${instanceName}, isVideo: ${isVideo}, base64Length: ${normalizedBase64.length}`
+      `Sending media via Evolution API: ${apiUrl}, instance: ${instanceName}, isVideo: ${isVideo}, isDocument: ${isDocument}, base64Length: ${normalizedBase64.length}`
     );
 
-    // Evolution API v2 uses sendMedia endpoint for both images and videos
+    // Determine mediatype and fileName based on content
+    let mediatype: string;
+    let fileName: string;
+
+    if (isDocument) {
+      mediatype = 'document';
+      if (mimeType.includes('pdf')) {
+        fileName = 'document.pdf';
+      } else if (mimeType.includes('powerpoint') || mimeType.includes('presentation')) {
+        fileName = 'presentation.pptx';
+      } else {
+        fileName = 'document.doc';
+      }
+    } else if (isVideo) {
+      mediatype = 'video';
+      fileName = 'video.mp4';
+    } else {
+      mediatype = 'image';
+      fileName = 'image.jpg';
+    }
+
+    // Evolution API v2 uses sendMedia endpoint for images/videos and documents
     const response = await axios.post(
       `${apiUrl}/message/sendMedia/${instanceName}`,
       {
         number: phoneNumber,
-        mediatype: isVideo ? 'video' : 'image',
+        mediatype,
         mimetype: mimeType,
         media: normalizedBase64,
         caption: caption || '',
-        fileName: isVideo ? 'video.mp4' : 'image.jpg',
+        fileName,
       },
       {
         headers: {
