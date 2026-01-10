@@ -1,7 +1,7 @@
 import { query } from './database.js';
 import { sendMessage } from './evolution.js';
 
-let inactivityInterval: NodeJS.Timeout | null = null;
+let inactivityInterval: ReturnType<typeof setInterval> | null = null;
 
 export function startInactivityChecker() {
   // Check every 30 seconds for inactive conversations
