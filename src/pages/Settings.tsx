@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Save, Eye, EyeOff, Key, Globe, Cpu, Database, CheckCircle, XCircle, Loader2, MessageSquare } from 'lucide-react';
+import { Save, Eye, EyeOff, Key, Globe, Cpu, Database, CheckCircle, XCircle, Loader2, MessageSquare, Palette, Upload, ImageIcon } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Input } from '@/components/ui/input';
@@ -34,6 +34,13 @@ const SettingsPage = () => {
     defaultModel: 'gpt-4o-mini',
   });
 
+  const [branding, setBranding] = useState({
+    systemName: 'WhatsAgent',
+    logoUrl: '',
+    iconUrl: '',
+  });
+  const [savingBranding, setSavingBranding] = useState(false);
+
   const [testingOpenAI, setTestingOpenAI] = useState(false);
   const [testingEvolution, setTestingEvolution] = useState(false);
   const [openAIStatus, setOpenAIStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -54,6 +61,11 @@ const SettingsPage = () => {
           evolutionApiUrl: data.evolution_api_url || '',
           evolutionApiKey: data.evolution_api_key || '',
           defaultModel: data.default_model || 'gpt-4o-mini',
+        });
+        setBranding({
+          systemName: data.system_name || 'WhatsAgent',
+          logoUrl: data.logo_url || '',
+          iconUrl: data.icon_url || '',
         });
       } catch (error) {
         console.error('Error loading settings:', error);
@@ -86,6 +98,44 @@ const SettingsPage = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSaveBranding = async () => {
+    setSavingBranding(true);
+    try {
+      await updateSettings({
+        system_name: branding.systemName,
+        logo_url: branding.logoUrl,
+        icon_url: branding.iconUrl,
+      });
+      toast({
+        title: 'Branding salvo!',
+        description: 'As configurações de marca foram atualizadas.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Erro ao salvar',
+        description: 'Não foi possível salvar o branding.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingBranding(false);
+    }
+  };
+
+  const handleImageUpload = (type: 'logo' | 'icon') => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      setBranding(prev => ({
+        ...prev,
+        [type === 'logo' ? 'logoUrl' : 'iconUrl']: base64,
+      }));
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleTestOpenAI = async () => {
@@ -211,6 +261,109 @@ const SettingsPage = () => {
       />
 
       <div className="max-w-2xl space-y-6">
+        {/* Branding Settings */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card p-6"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Palette className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-foreground">Branding</h2>
+              <p className="text-sm text-muted-foreground">Personalize a identidade do sistema</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="system-name">Nome do Sistema</Label>
+              <Input
+                id="system-name"
+                placeholder="WhatsAgent"
+                value={branding.systemName}
+                onChange={(e) => setBranding(prev => ({ ...prev, systemName: e.target.value }))}
+                className="bg-muted border-border"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Logo</Label>
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload('logo')}
+                    className="hidden"
+                    id="logo-upload"
+                  />
+                  <label
+                    htmlFor="logo-upload"
+                    className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 transition-colors bg-muted/50"
+                  >
+                    {branding.logoUrl ? (
+                      <img src={branding.logoUrl} alt="Logo" className="h-24 object-contain" />
+                    ) : (
+                      <>
+                        <Upload className="w-8 h-8 text-muted-foreground mb-2" />
+                        <span className="text-sm text-muted-foreground">Upload Logo</span>
+                      </>
+                    )}
+                  </label>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Ícone</Label>
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload('icon')}
+                    className="hidden"
+                    id="icon-upload"
+                  />
+                  <label
+                    htmlFor="icon-upload"
+                    className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 transition-colors bg-muted/50"
+                  >
+                    {branding.iconUrl ? (
+                      <img src={branding.iconUrl} alt="Ícone" className="h-24 object-contain" />
+                    ) : (
+                      <>
+                        <ImageIcon className="w-8 h-8 text-muted-foreground mb-2" />
+                        <span className="text-sm text-muted-foreground">Upload Ícone</span>
+                      </>
+                    )}
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={handleSaveBranding}
+              disabled={savingBranding}
+            >
+              {savingBranding ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Salvar Branding
+                </>
+              )}
+            </Button>
+          </div>
+        </motion.div>
+
         {/* OpenAI Settings */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}

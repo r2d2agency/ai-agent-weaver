@@ -7,11 +7,16 @@ interface MainLayoutProps {
 
 export function MainLayout({ children }: MainLayoutProps) {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <Sidebar />
-      <main className="ml-64 p-8">
+      <main className="ml-64 p-8 flex-1">
         {children}
       </main>
+      <footer className="ml-64 py-4 px-8 border-t border-border text-center">
+        <p className="text-sm text-muted-foreground">
+          Desenvolvido por <span className="font-medium text-foreground">Thiago Nicodemos</span> - <span className="text-primary font-semibold">R2D2</span>
+        </p>
+      </footer>
     </div>
   );
 }
