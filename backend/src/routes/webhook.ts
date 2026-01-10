@@ -217,7 +217,7 @@ async function processAndRespond(
 
     // Generate AI response for all accumulated messages
     const aiResult = await generateResponse(agent, combinedMessage, phoneNumber);
-    const { text: aiResponse, mediaToSend } = aiResult;
+    const { text: aiResponse, mediaToSend, notifyHuman } = aiResult;
 
     // Split response into smaller messages for natural conversation
     const splitMessages = (text: string): string[] => {
@@ -481,7 +481,73 @@ async function processAndRespond(
       }
     }
 
-    console.log(`Batched response sent to ${phoneNumber} (${messageParts.length} messages, ${mediaToSend?.length || 0} media)`);
+    // Send notification to human operator if requested
+    if (notifyHuman && agent.notification_number) {
+      try {
+        const notificationNumber = agent.notification_number.replace(/\D/g, '');
+        
+        // Build notification message
+        const notificationMessage = `🚨 *Transferência de Atendimento*
+
+📞 *Cliente:* ${notifyHuman.customerName || 'Não informado'}
+📱 *Telefone:* ${notifyHuman.customerPhone}
+
+📋 *Motivo:* ${notifyHuman.reason}
+
+💬 *Resumo da conversa:*
+${notifyHuman.summary}
+
+_Enviado pelo agente: ${agent.name}_`;
+
+        console.log(`Sending notification to human operator: ${notificationNumber}`);
+        
+        await createLog(
+          agent.id,
+          'tool_call',
+          'Enviando notificação para atendente humano',
+          {
+            notificationNumber,
+            reason: notifyHuman.reason,
+            customerPhone: notifyHuman.customerPhone,
+          },
+          phoneNumber,
+          'whatsapp'
+        );
+
+        await sendMessage(instanceName, notificationNumber, notificationMessage, agent);
+        
+        console.log(`Human notification sent successfully to ${notificationNumber}`);
+        
+        await createLog(
+          agent.id,
+          'info',
+          'Notificação enviada para atendente',
+          { notificationNumber, success: true },
+          phoneNumber,
+          'whatsapp'
+        );
+
+        // Activate takeover since we're transferring to human
+        await query(
+          `UPDATE conversation_activity 
+           SET takeover_active = true, takeover_until = CURRENT_TIMESTAMP + INTERVAL '30 minutes'
+           WHERE agent_id = $1 AND phone_number = $2`,
+          [agent.id, phoneNumber]
+        );
+      } catch (notifyError: any) {
+        console.error('Failed to send human notification:', notifyError);
+        await createLog(
+          agent.id,
+          'error',
+          'Falha ao notificar atendente',
+          { error: notifyError.message },
+          phoneNumber,
+          'whatsapp'
+        );
+      }
+    }
+
+    console.log(`Batched response sent to ${phoneNumber} (${messageParts.length} messages, ${mediaToSend?.length || 0} media, notify: ${!!notifyHuman})`);
   } catch (error) {
     console.error(`Error processing batched response for ${phoneNumber}:`, error);
     // Fallback: never stay silent
