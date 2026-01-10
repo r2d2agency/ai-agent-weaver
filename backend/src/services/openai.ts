@@ -73,6 +73,7 @@ interface AgentWithConfig extends Agent {
   audio_response_enabled?: boolean;
   audio_response_voice?: string;
   notification_number?: string;
+  transfer_instructions?: string;
   instance_name?: string;
 }
 
@@ -257,6 +258,11 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
 
     // Add notify_human context if notification number is configured
     if (agent.notification_number) {
+      // Build custom instructions section
+      const customInstructions = agent.transfer_instructions 
+        ? `\n\n### Instruções Personalizadas do Negócio:\n${agent.transfer_instructions}\n`
+        : '';
+
       systemPrompt += `\n\n## Transferência para Atendente Humano:
 Você tem a capacidade de notificar um atendente humano via WhatsApp quando necessário.
 Use a função "notify_human" quando:
@@ -265,7 +271,7 @@ Use a função "notify_human" quando:
 - Você não conseguir resolver o problema do cliente
 - A situação for complexa e requer análise humana
 - O cliente estiver insatisfeito ou frustrado
-
+${customInstructions}
 IMPORTANTE: Ao usar notify_human, forneça:
 - reason: Motivo claro (ex: "Confirmação de pedido", "Transferência solicitada", etc.)
 - conversation_history: Histórico COMPLETO da conversa. Copie TODAS as mensagens abaixo:
@@ -276,7 +282,7 @@ ${historyForSummary}
 
 Inclua também a mensagem atual do cliente no conversation_history.
 
-- order_details: Se for um pedido, liste TODOS os detalhes: produtos, quantidades, valores, endereço de entrega, forma de pagamento, observações, etc.
+- order_details: ${agent.transfer_instructions ? 'SIGA AS INSTRUÇÕES PERSONALIZADAS ACIMA para preencher este campo com as informações relevantes.' : 'Se for um pedido, liste TODOS os detalhes: produtos, quantidades, valores, endereço de entrega, forma de pagamento, observações, etc.'}
 - customer_name: Nome do cliente se mencionado na conversa`;
     }
 
@@ -566,6 +572,11 @@ export async function generateTestResponse(agent: AgentWithConfig, userMessage: 
 
     // Add notify_human context if notification number is configured
     if (agent.notification_number) {
+      // Build custom instructions section
+      const customInstructions = agent.transfer_instructions 
+        ? `\n\n### Instruções Personalizadas do Negócio:\n${agent.transfer_instructions}\n`
+        : '';
+
       systemPrompt += `\n\n## Transferência para Atendente Humano:
 Você tem a capacidade de notificar um atendente humano via WhatsApp quando necessário.
 Use a função "notify_human" quando:
@@ -574,7 +585,7 @@ Use a função "notify_human" quando:
 - Você não conseguir resolver o problema do cliente
 - A situação for complexa e requer análise humana
 - O cliente estiver insatisfeito ou frustrado
-
+${customInstructions}
 IMPORTANTE: Ao usar notify_human, forneça:
 - reason: Motivo claro (ex: "Confirmação de pedido", "Transferência solicitada", etc.)
 - conversation_history: Histórico COMPLETO da conversa. Copie TODAS as mensagens abaixo:
@@ -585,7 +596,7 @@ ${historyForSummary}
 
 Inclua também a mensagem atual do cliente no conversation_history.
 
-- order_details: Se for um pedido, liste TODOS os detalhes: produtos, quantidades, valores, endereço de entrega, forma de pagamento, observações, etc.
+- order_details: ${agent.transfer_instructions ? 'SIGA AS INSTRUÇÕES PERSONALIZADAS ACIMA para preencher este campo com as informações relevantes.' : 'Se for um pedido, liste TODOS os detalhes: produtos, quantidades, valores, endereço de entrega, forma de pagamento, observações, etc.'}
 - customer_name: Nome do cliente se mencionado na conversa`;
     }
 

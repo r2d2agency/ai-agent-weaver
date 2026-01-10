@@ -61,6 +61,7 @@ const AgentDetailsPage = () => {
     audioResponseEnabled: false,
     audioResponseVoice: 'nova',
     notificationNumber: '',
+    transferInstructions: '',
   });
 
   const [testingEvolution, setTestingEvolution] = useState(false);
@@ -117,6 +118,7 @@ const AgentDetailsPage = () => {
         audioResponseEnabled: agentData.audio_response_enabled === true,
         audioResponseVoice: agentData.audio_response_voice || 'nova',
         notificationNumber: agentData.notification_number || '',
+        transferInstructions: agentData.transfer_instructions || '',
       });
     }
   }, [agentData]);
@@ -293,6 +295,14 @@ const AgentDetailsPage = () => {
     updateAgentMutation.mutate({
       id,
       data: { notificationNumber: formData.notificationNumber || null } as any,
+    });
+  };
+
+  const handleTransferInstructionsChange = () => {
+    if (!id) return;
+    updateAgentMutation.mutate({
+      id,
+      data: { transferInstructions: formData.transferInstructions || null } as any,
     });
   };
 
@@ -844,24 +854,46 @@ const AgentDetailsPage = () => {
               <h3 className="font-semibold text-foreground">Notificação para Humano</h3>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
-              Número do WhatsApp que será notificado quando a IA precisar transferir o atendimento para um humano.
+              Configure como a IA deve transferir atendimentos para um humano.
             </p>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <Phone className="w-4 h-4 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="5511999999999"
-                  value={formData.notificationNumber}
-                  onChange={(e) => setFormData(prev => ({ ...prev, notificationNumber: e.target.value }))}
-                  onBlur={handleNotificationNumberChange}
-                  className="flex-1 bg-muted border-border"
-                />
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-xs">Número do WhatsApp</Label>
+                <div className="flex items-center gap-3">
+                  <Phone className="w-4 h-4 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="5511999999999"
+                    value={formData.notificationNumber}
+                    onChange={(e) => setFormData(prev => ({ ...prev, notificationNumber: e.target.value }))}
+                    onBlur={handleNotificationNumberChange}
+                    className="flex-1 bg-muted border-border"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Formato: código do país + DDD + número (ex: 5511999999999)
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Formato: código do país + DDD + número (ex: 5511999999999). 
-                A IA pode usar a ferramenta "notify_human" quando precisar de ajuda humana.
-              </p>
+              
+              {formData.notificationNumber && (
+                <div className="space-y-2">
+                  <Label className="text-xs">Instruções de Transferência</Label>
+                  <Textarea
+                    placeholder={`Exemplos de instruções:
+• Ao transferir pedido, incluir: nome do cliente, produtos, quantidades, valores, endereço de entrega, forma de pagamento
+• Ao transferir dúvida, incluir: assunto principal, tentativas de resolução já feitas
+• Ao transferir reclamação, incluir: motivo, histórico completo, nível de urgência`}
+                    value={formData.transferInstructions}
+                    onChange={(e) => setFormData(prev => ({ ...prev, transferInstructions: e.target.value }))}
+                    onBlur={handleTransferInstructionsChange}
+                    className="bg-muted border-border min-h-[120px] text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Defina quais informações a IA deve coletar e enviar ao atendente humano. 
+                    Seja específico sobre os dados importantes para seu negócio.
+                  </p>
+                </div>
+              )}
             </div>
           </motion.div>
 
