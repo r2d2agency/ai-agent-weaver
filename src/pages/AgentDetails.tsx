@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, Images, File, Key, Link2, Upload, Palette, Video, HelpCircle, Volume2 } from 'lucide-react';
+import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, Images, File, Key, Link2, Upload, Palette, Video, HelpCircle, Volume2, Play, Square } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useAgent, useUpdateAgent, useDeleteAgent } from '@/hooks/use-agents';
 import { useToast } from '@/hooks/use-toast';
-import { API_BASE_URL, testAgentEvolution } from '@/lib/api';
+import { API_BASE_URL, testAgentEvolution, previewVoice } from '@/lib/api';
 import { TestAgentModal } from '@/components/agents/TestAgentModal';
 import { AgentDocumentsModal } from '@/components/agents/AgentDocumentsModal';
 import { AgentMediaModal } from '@/components/agents/AgentMediaModal';
@@ -71,6 +71,9 @@ const AgentDetailsPage = () => {
   const [faqModalOpen, setFaqModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [webhookCopied, setWebhookCopied] = useState(false);
+  const [playingVoice, setPlayingVoice] = useState<string | null>(null);
+  const [loadingVoice, setLoadingVoice] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Auto-generate webhook URL based on instance name
   const generatedWebhookUrl = formData.instanceName 
@@ -281,6 +284,57 @@ const AgentDetailsPage = () => {
       id,
       data: { audioResponseVoice: voice } as any,
     });
+  };
+
+  const handlePreviewVoice = async (voice: string) => {
+    // If same voice is playing, stop it
+    if (playingVoice === voice && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      setPlayingVoice(null);
+      return;
+    }
+
+    // Stop any currently playing audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+
+    setLoadingVoice(voice);
+    try {
+      const result = await previewVoice(voice, id);
+      
+      if (result.success && result.audio) {
+        const audioUrl = `data:${result.mimeType};base64,${result.audio}`;
+        const audio = new Audio(audioUrl);
+        audioRef.current = audio;
+        
+        audio.onended = () => {
+          setPlayingVoice(null);
+        };
+        
+        audio.onerror = () => {
+          setPlayingVoice(null);
+          toast({
+            title: 'Erro ao reproduzir',
+            description: 'Não foi possível reproduzir o áudio.',
+            variant: 'destructive',
+          });
+        };
+        
+        await audio.play();
+        setPlayingVoice(voice);
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Erro ao gerar preview',
+        description: error.message || 'Verifique se a API Key da OpenAI está configurada.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingVoice(null);
+    }
   };
 
   const handleToggleWidget = (enabled: boolean) => {
@@ -915,8 +969,8 @@ const AgentDetailsPage = () => {
             </p>
             {formData.audioResponseEnabled && (
               <div className="space-y-3">
-                <Label className="text-xs">Selecione a Voz</Label>
-                <div className="grid grid-cols-3 gap-2">
+                <Label className="text-xs">Selecione a Voz (clique no 🔊 para ouvir)</Label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {[
                     { id: 'nova', label: 'Nova', emoji: '👩', desc: 'Feminina suave' },
                     { id: 'shimmer', label: 'Shimmer', emoji: '👩‍💼', desc: 'Feminina expressiva' },
@@ -925,26 +979,54 @@ const AgentDetailsPage = () => {
                     { id: 'echo', label: 'Echo', emoji: '👨‍💼', desc: 'Masculina média' },
                     { id: 'fable', label: 'Fable', emoji: '🎭', desc: 'Expressiva/Narradora' },
                   ].map((voice) => (
-                    <button
+                    <div
                       key={voice.id}
-                      type="button"
-                      onClick={() => handleAudioResponseVoiceChange(voice.id)}
-                      className={`p-3 rounded-lg border text-left transition-all ${
+                      className={`relative p-3 rounded-lg border transition-all ${
                         formData.audioResponseVoice === voice.id 
                           ? 'border-primary bg-primary/10 ring-2 ring-primary/20' 
                           : 'border-border bg-muted hover:border-primary/50'
                       }`}
                     >
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-lg">{voice.emoji}</span>
-                        <span className="text-sm font-medium">{voice.label}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">{voice.desc}</p>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAudioResponseVoiceChange(voice.id)}
+                        className="w-full text-left"
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">{voice.emoji}</span>
+                          <span className="text-sm font-medium">{voice.label}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{voice.desc}</p>
+                      </button>
+                      
+                      {/* Preview button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePreviewVoice(voice.id);
+                        }}
+                        disabled={loadingVoice === voice.id}
+                        className={`absolute top-2 right-2 p-1.5 rounded-full transition-all ${
+                          playingVoice === voice.id 
+                            ? 'bg-primary text-primary-foreground' 
+                            : 'bg-muted-foreground/10 hover:bg-muted-foreground/20 text-muted-foreground'
+                        }`}
+                        title={playingVoice === voice.id ? 'Parar' : 'Ouvir preview'}
+                      >
+                        {loadingVoice === voice.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : playingVoice === voice.id ? (
+                          <Square className="w-3.5 h-3.5" />
+                        ) : (
+                          <Play className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
                   ))}
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  💡 Usa OpenAI TTS para gerar áudio natural. Teste as vozes no <a href="https://platform.openai.com/docs/guides/text-to-speech" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">playground da OpenAI</a>.
+                  🎧 Clique no ▶️ de cada voz para ouvir um sample antes de selecionar.
                 </p>
               </div>
             )}

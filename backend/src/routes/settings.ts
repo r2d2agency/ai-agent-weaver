@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { query } from '../services/database.js';
 import { testEvolutionConnection, testInstanceConnection, fetchAllInstances } from '../services/evolution.js';
-import { resetOpenAIClient } from '../services/openai.js';
+import { resetOpenAIClient, previewVoice } from '../services/openai.js';
 
 export const settingsRouter = Router();
 
@@ -105,5 +105,37 @@ settingsRouter.post('/test-openai', async (req, res) => {
     }
   } catch (error) {
     res.json({ success: false, error: 'Connection failed' });
+  }
+});
+
+// Preview TTS voice
+settingsRouter.post('/preview-voice', async (req, res) => {
+  try {
+    const { voice, agentId } = req.body;
+    
+    if (!voice) {
+      return res.status(400).json({ error: 'Voice is required' });
+    }
+
+    // Get agent-specific API key if provided
+    let agent = null;
+    if (agentId) {
+      const agentResult = await query('SELECT openai_api_key FROM agents WHERE id = $1', [agentId]);
+      if (agentResult.rows.length > 0) {
+        agent = agentResult.rows[0];
+      }
+    }
+
+    const audioBuffer = await previewVoice(voice, agent);
+    const base64Audio = audioBuffer.toString('base64');
+    
+    res.json({ 
+      success: true, 
+      audio: base64Audio,
+      mimeType: 'audio/mpeg'
+    });
+  } catch (error: any) {
+    console.error('Voice preview error:', error);
+    res.status(500).json({ error: error.message || 'Failed to generate voice preview' });
   }
 });

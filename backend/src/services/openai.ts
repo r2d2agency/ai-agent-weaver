@@ -588,3 +588,39 @@ export async function textToSpeech(
     throw error;
   }
 }
+
+// Preview voice for TTS settings
+export async function previewVoice(
+  voice: string,
+  agent?: { openai_api_key?: string } | null
+): Promise<Buffer> {
+  try {
+    const client = agent?.openai_api_key 
+      ? new (await import('openai')).default({ apiKey: agent.openai_api_key })
+      : await getGlobalOpenAIClient();
+    
+    const sampleTexts: Record<string, string> = {
+      nova: 'Olá! Eu sou a Nova, uma voz feminina suave e natural.',
+      shimmer: 'Oi! Meu nome é Shimmer, tenho uma voz feminina expressiva.',
+      alloy: 'Olá! Eu sou Alloy, uma voz neutra e versátil.',
+      onyx: 'Olá! Eu sou o Onyx, uma voz masculina grave e profunda.',
+      echo: 'Oi! Meu nome é Echo, tenho uma voz masculina clara.',
+      fable: 'Olá! Eu sou Fable, perfeita para narração de histórias.',
+    };
+    
+    const text = sampleTexts[voice] || `Esta é uma demonstração da voz ${voice}.`;
+    
+    const response = await client.audio.speech.create({
+      model: 'tts-1',
+      voice: voice as 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer',
+      input: text,
+      response_format: 'mp3',
+    });
+    
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (error) {
+    console.error('Voice preview error:', error);
+    throw error;
+  }
+}
