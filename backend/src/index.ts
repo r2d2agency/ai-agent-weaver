@@ -9,6 +9,7 @@ import { authRouter } from './routes/auth.js';
 import { widgetRouter } from './routes/widget.js';
 import { documentsRouter } from './routes/documents.js';
 import { conversationsRouter } from './routes/conversations.js';
+import { mediaRouter } from './routes/media.js';
 import { initDatabase } from './services/database.js';
 import { startInactivityChecker } from './services/inactivity.js';
 
@@ -35,6 +36,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/widget', widgetRouter);
 app.use('/api/documents', documentsRouter);
 app.use('/api/conversations', conversationsRouter);
+app.use('/api/media', mediaRouter);
 
 // Initialize database and start server
 async function start() {

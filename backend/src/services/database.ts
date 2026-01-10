@@ -139,6 +139,19 @@ export async function initDatabase() {
         UNIQUE(agent_id, phone_number)
       );
 
+      -- Agent media gallery (images, videos) for RAG
+      CREATE TABLE IF NOT EXISTS agent_media (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agent_id UUID REFERENCES agents(id) ON DELETE CASCADE NOT NULL,
+        media_type VARCHAR(20) NOT NULL, -- 'image' | 'gallery' | 'video'
+        name VARCHAR(255) NOT NULL,
+        description TEXT NOT NULL,
+        file_urls TEXT[] NOT NULL, -- Array of URLs (1 for single, up to 4 for gallery)
+        file_sizes INTEGER[],
+        mime_types VARCHAR(100)[],
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
       -- Add new columns if they don't exist (for existing databases)
       DO $$ 
       BEGIN 
