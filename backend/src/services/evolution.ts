@@ -102,18 +102,27 @@ export async function sendMedia(
       : await getEvolutionCredentials();
     
     const isVideo = mimeType.includes('video');
-    
-    console.log(`Sending media via Evolution API: ${apiUrl}, instance: ${instanceName}, isVideo: ${isVideo}`);
-    
+
+    // Evolution API expects either a public URL OR a raw base64 string (not a data URL)
+    const normalizedBase64 = (() => {
+      const match = String(mediaBase64 || '').match(/^data:[^;]+;base64,(.+)$/);
+      return match ? match[1] : String(mediaBase64 || '');
+    })();
+
+    console.log(
+      `Sending media via Evolution API: ${apiUrl}, instance: ${instanceName}, isVideo: ${isVideo}, base64Length: ${normalizedBase64.length}`
+    );
+
     // Evolution API v2 uses sendMedia endpoint for both images and videos
     const response = await axios.post(
       `${apiUrl}/message/sendMedia/${instanceName}`,
       {
         number: phoneNumber,
         mediatype: isVideo ? 'video' : 'image',
-        media: `data:${mimeType};base64,${mediaBase64}`,
+        mimetype: mimeType,
+        media: normalizedBase64,
         caption: caption || '',
-        fileName: isVideo ? 'video.mp4' : 'image.jpg'
+        fileName: isVideo ? 'video.mp4' : 'image.jpg',
       },
       {
         headers: {
