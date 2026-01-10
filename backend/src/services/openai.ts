@@ -4,6 +4,26 @@ import { createLog } from '../routes/logs.js';
 
 let globalOpenaiClient: OpenAI | null = null;
 
+// Get current date/time in Brasilia timezone
+function getBrasiliaDateTime(): string {
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return formatter.format(now);
+}
+
+function getDateTimeContext(): string {
+  const dateTime = getBrasiliaDateTime();
+  return `\n\n[INFORMAÇÃO DO SISTEMA - Data e Hora Atual (Horário de Brasília): ${dateTime}]\n`;
+}
+
 // Get global OpenAI client (fallback)
 async function getGlobalOpenAIClient(): Promise<OpenAI> {
   if (!globalOpenaiClient) {
@@ -177,7 +197,10 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
 - Separe ideias diferentes com "---" para que sejam enviadas como mensagens separadas
 - Seja conversacional e amigável`;
 
-    let systemPrompt = agent.prompt + naturalResponseInstruction;
+    // Add date/time context to system prompt
+    const dateTimeContext = getDateTimeContext();
+    
+    let systemPrompt = agent.prompt + dateTimeContext + naturalResponseInstruction;
     
     if (docsContext) {
       systemPrompt += `\n\nContexto adicional dos documentos:\n${docsContext}`;
@@ -391,9 +414,13 @@ export async function generateTestResponse(agent: AgentWithConfig, userMessage: 
       .filter(Boolean)
       .join('\n\n');
 
+    // Add date/time context to test responses too
+    const dateTimeContext = getDateTimeContext();
+    const basePrompt = agent.prompt + dateTimeContext;
+    
     const systemPrompt = docsContext 
-      ? `${agent.prompt}\n\nContexto adicional dos documentos:\n${docsContext}`
-      : agent.prompt;
+      ? `${basePrompt}\n\nContexto adicional dos documentos:\n${docsContext}`
+      : basePrompt;
 
     const client = await getAgentOpenAIClient(agent);
     const model = agent.openai_model || process.env.OPENAI_MODEL || 'gpt-4o';
