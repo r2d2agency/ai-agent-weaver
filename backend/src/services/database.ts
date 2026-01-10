@@ -91,10 +91,6 @@ export async function initDatabase() {
     client.release();
   }
 }
-  } finally {
-    client.release();
-  }
-}
 
 export async function query(text: string, params?: any[]) {
   const result = await pool.query(text, params);
