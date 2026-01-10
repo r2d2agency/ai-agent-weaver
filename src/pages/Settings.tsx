@@ -18,10 +18,12 @@ import { Settings } from '@/types/agent';
 import { API_BASE_URL, getSettings, updateSettings } from '@/lib/api';
 import { TestAgentModal } from '@/components/agents/TestAgentModal';
 import { useAgents } from '@/hooks/use-agents';
+import { useBranding } from '@/contexts/BrandingContext';
 
 const SettingsPage = () => {
   const { toast } = useToast();
   const { data: agents } = useAgents();
+  const { refetch: refetchBranding } = useBranding();
   const [showKeys, setShowKeys] = useState({
     openai: false,
     evolution: false,
@@ -108,6 +110,8 @@ const SettingsPage = () => {
         logo_url: branding.logoUrl,
         icon_url: branding.iconUrl,
       });
+      // Refresh branding context so sidebar updates
+      await refetchBranding();
       toast({
         title: 'Branding salvo!',
         description: 'As configurações de marca foram atualizadas.',
