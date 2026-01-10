@@ -169,9 +169,15 @@ export async function generateTestResponse(agent: AgentWithConfig, userMessage: 
 export async function transcribeAudio(agent: AgentWithConfig, audioBuffer: Buffer, mimeType: string = 'audio/ogg'): Promise<string> {
   try {
     const client = await getAgentOpenAIClient(agent);
-    
-    const audioFile = new File([audioBuffer], 'audio.ogg', { type: mimeType });
-    
+
+    // Avoid depending on DOM lib types in TypeScript; Node 18+ provides global File at runtime.
+    const FileCtor = (globalThis as any).File;
+    if (!FileCtor) {
+      throw new Error('Global File constructor not available. Please run on Node 18+');
+    }
+
+    const audioFile = new FileCtor([audioBuffer], 'audio.ogg', { type: mimeType });
+
     const transcription = await client.audio.transcriptions.create({
       file: audioFile,
       model: 'whisper-1',
