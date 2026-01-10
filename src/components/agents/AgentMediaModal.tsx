@@ -10,7 +10,9 @@ import {
   Loader2,
   Plus,
   FileImage,
-  Play
+  Play,
+  FileText,
+  File
 } from 'lucide-react';
 import {
   Dialog,
@@ -32,7 +34,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 interface MediaItem {
   id: string;
   agent_id: string;
-  media_type: 'image' | 'gallery' | 'video';
+  media_type: 'image' | 'gallery' | 'video' | 'document';
   name: string;
   description: string;
   file_urls: string[];
@@ -63,8 +65,9 @@ export function AgentMediaModal({ open, onOpenChange, agent }: AgentMediaModalPr
   const imageInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
   
-  const [activeTab, setActiveTab] = useState<'image' | 'gallery' | 'video'>('image');
+  const [activeTab, setActiveTab] = useState<'image' | 'gallery' | 'video' | 'document'>('image');
   const [isUploading, setIsUploading] = useState(false);
   
   // Form state
@@ -131,9 +134,10 @@ export function AgentMediaModal({ open, onOpenChange, agent }: AgentMediaModalPr
     if (imageInputRef.current) imageInputRef.current.value = '';
     if (galleryInputRef.current) galleryInputRef.current.value = '';
     if (videoInputRef.current) videoInputRef.current.value = '';
+    if (documentInputRef.current) documentInputRef.current.value = '';
   };
 
-  const handleFileSelect = async (fileList: FileList, type: 'image' | 'gallery' | 'video') => {
+  const handleFileSelect = async (fileList: FileList, type: 'image' | 'gallery' | 'video' | 'document') => {
     const maxFiles = type === 'gallery' ? 4 : 1;
     const selectedFiles = Array.from(fileList).slice(0, maxFiles);
     
@@ -210,6 +214,7 @@ export function AgentMediaModal({ open, onOpenChange, agent }: AgentMediaModalPr
       case 'image': return <Image className="w-4 h-4" />;
       case 'gallery': return <Images className="w-4 h-4" />;
       case 'video': return <Video className="w-4 h-4" />;
+      case 'document': return <FileText className="w-4 h-4" />;
       default: return <FileImage className="w-4 h-4" />;
     }
   };
@@ -219,8 +224,15 @@ export function AgentMediaModal({ open, onOpenChange, agent }: AgentMediaModalPr
       case 'image': return 'bg-blue-500/20 text-blue-400';
       case 'gallery': return 'bg-purple-500/20 text-purple-400';
       case 'video': return 'bg-green-500/20 text-green-400';
+      case 'document': return 'bg-orange-500/20 text-orange-400';
       default: return 'bg-muted text-muted-foreground';
     }
+  };
+
+  const getDocumentIcon = (mimeType: string) => {
+    if (mimeType.includes('pdf')) return 'PDF';
+    if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return 'PPT';
+    return 'DOC';
   };
 
   return (
@@ -236,18 +248,22 @@ export function AgentMediaModal({ open, onOpenChange, agent }: AgentMediaModalPr
         <div className="flex-1 overflow-hidden flex flex-col gap-4">
           {/* Upload Section */}
           <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as any); resetForm(); }}>
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="image" className="flex items-center gap-2">
-                <Image className="w-4 h-4" />
-                Foto Individual
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="image" className="flex items-center gap-1 text-xs">
+                <Image className="w-3 h-3" />
+                Foto
               </TabsTrigger>
-              <TabsTrigger value="gallery" className="flex items-center gap-2">
-                <Images className="w-4 h-4" />
-                Galeria (até 4)
+              <TabsTrigger value="gallery" className="flex items-center gap-1 text-xs">
+                <Images className="w-3 h-3" />
+                Galeria
               </TabsTrigger>
-              <TabsTrigger value="video" className="flex items-center gap-2">
-                <Video className="w-4 h-4" />
+              <TabsTrigger value="video" className="flex items-center gap-1 text-xs">
+                <Video className="w-3 h-3" />
                 Vídeo
+              </TabsTrigger>
+              <TabsTrigger value="document" className="flex items-center gap-1 text-xs">
+                <FileText className="w-3 h-3" />
+                Documento
               </TabsTrigger>
             </TabsList>
 
@@ -418,6 +434,69 @@ export function AgentMediaModal({ open, onOpenChange, agent }: AgentMediaModalPr
                   <Label>Descrição para o Agente</Label>
                   <Textarea
                     placeholder="Descreva o vídeo para que o agente saiba quando enviar. Ex: Vídeo tutorial mostrando como montar o produto, 2 minutos de duração"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="mt-1 min-h-[80px]"
+                  />
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="document" className="space-y-3 mt-4">
+              <div className="grid gap-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Nome do Documento</Label>
+                    <Input
+                      placeholder="Ex: Apresentação Comercial"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label>Arquivo (PDF ou PowerPoint)</Label>
+                    <input
+                      ref={documentInputRef}
+                      type="file"
+                      accept=".pdf,.ppt,.pptx,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                      onChange={(e) => e.target.files && handleFileSelect(e.target.files, 'document')}
+                      className="hidden"
+                    />
+                    <Button
+                      variant="outline"
+                      className="w-full mt-1"
+                      onClick={() => documentInputRef.current?.click()}
+                      disabled={isUploading}
+                    >
+                      {isUploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
+                      {files.length > 0 ? 'Trocar documento' : 'Selecionar documento'}
+                    </Button>
+                  </div>
+                </div>
+                
+                {files.length > 0 && (
+                  <div className="relative flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
+                    <div className="w-12 h-12 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                      <FileText className="w-6 h-6 text-orange-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{getDocumentIcon(files[0].mimeType)}</p>
+                      <p className="text-xs text-muted-foreground">{formatSize(files[0].size)}</p>
+                    </div>
+                    <button
+                      onClick={() => removeFile(0)}
+                      className="p-1.5 rounded-full hover:bg-muted"
+                    >
+                      <X className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                  </div>
+                )}
+                
+                <div>
+                  <Label>Descrição para o Agente</Label>
+                  <Textarea
+                    placeholder="Descreva o documento para que o agente saiba quando enviar. Ex: Apresentação comercial com catálogo de produtos e tabela de preços"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     className="mt-1 min-h-[80px]"

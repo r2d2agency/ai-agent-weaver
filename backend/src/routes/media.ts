@@ -66,8 +66,8 @@ mediaRouter.post('/agent/:agentId/upload', async (req, res) => {
       return res.status(400).json({ error: 'Gallery can have at most 4 images' });
     }
     
-    if ((mediaType === 'image' || mediaType === 'video') && files.length > 1) {
-      return res.status(400).json({ error: 'Single image/video can only have 1 file' });
+    if ((mediaType === 'image' || mediaType === 'video' || mediaType === 'document') && files.length > 1) {
+      return res.status(400).json({ error: 'Single image/video/document can only have 1 file' });
     }
     
     // Convert base64 to data URLs
