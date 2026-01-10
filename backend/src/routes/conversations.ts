@@ -104,3 +104,26 @@ conversationsRouter.get('/contacts', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch contacts' });
   }
 });
+
+// Delete conversation (all messages for a phone number and agent)
+conversationsRouter.delete('/agent/:agentId/phone/:phoneNumber', async (req, res) => {
+  try {
+    const { agentId, phoneNumber } = req.params;
+    
+    // Delete all messages for this conversation
+    const result = await query(
+      `DELETE FROM messages 
+       WHERE agent_id = $1 AND phone_number = $2
+       RETURNING id`,
+      [agentId, phoneNumber]
+    );
+    
+    res.json({ 
+      success: true, 
+      deletedCount: result.rowCount 
+    });
+  } catch (error) {
+    console.error('Error deleting conversation:', error);
+    res.status(500).json({ error: 'Failed to delete conversation' });
+  }
+});
