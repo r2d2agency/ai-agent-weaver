@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import OpenAI, { toFile } from 'openai';
 import { query } from './database.js';
 
 let globalOpenaiClient: OpenAI | null = null;
@@ -166,17 +166,27 @@ export async function generateTestResponse(agent: AgentWithConfig, userMessage: 
 }
 
 // Transcribe audio to text using Whisper
-export async function transcribeAudio(agent: AgentWithConfig, audioBuffer: Buffer, mimeType: string = 'audio/ogg'): Promise<string> {
+export async function transcribeAudio(
+  agent: AgentWithConfig,
+  audioBuffer: Buffer,
+  mimeType: string = 'audio/ogg',
+  fileName?: string
+): Promise<string> {
   try {
     const client = await getAgentOpenAIClient(agent);
 
-    // Avoid depending on DOM lib types in TypeScript; Node 18+ provides global File at runtime.
-    const FileCtor = (globalThis as any).File;
-    if (!FileCtor) {
-      throw new Error('Global File constructor not available. Please run on Node 18+');
-    }
+    const cleanMimeType = (mimeType || 'audio/ogg').split(';')[0].trim() || 'audio/ogg';
 
-    const audioFile = new FileCtor([audioBuffer], 'audio.ogg', { type: mimeType });
+    const inferredName = (() => {
+      if (fileName) return fileName;
+      if (cleanMimeType.includes('mp3') || cleanMimeType.includes('mpeg')) return 'audio.mp3';
+      if (cleanMimeType.includes('mp4') || cleanMimeType.includes('m4a')) return 'audio.m4a';
+      if (cleanMimeType.includes('wav')) return 'audio.wav';
+      if (cleanMimeType.includes('webm')) return 'audio.webm';
+      return 'audio.ogg';
+    })();
+
+    const audioFile = await toFile(audioBuffer, inferredName, { contentType: cleanMimeType });
 
     const transcription = await client.audio.transcriptions.create({
       file: audioFile,

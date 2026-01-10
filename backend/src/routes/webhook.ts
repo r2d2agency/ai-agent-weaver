@@ -165,15 +165,28 @@ webhookRouter.post('/:instanceName', async (req, res) => {
     else if (payload.data?.message?.audioMessage && audioEnabled) {
       isAudioMessage = true;
       const audioMessage = payload.data.message.audioMessage;
-      
+
       console.log(`Received audio message from ${phoneNumber}, attempting to transcribe...`);
-      
+
       try {
         const base64 = await downloadMediaForAgent(instanceName, payload.data.key.id, agent);
-        
+
         if (base64) {
           const audioBuffer = Buffer.from(base64, 'base64');
-          messageContent = await transcribeAudio(agent, audioBuffer, audioMessage.mimetype || 'audio/ogg');
+
+          const rawMime = audioMessage.mimetype || 'audio/ogg';
+          const cleanMime = rawMime.split(';')[0].trim() || 'audio/ogg';
+          const fileName = cleanMime.includes('mp3') || cleanMime.includes('mpeg')
+            ? 'audio.mp3'
+            : cleanMime.includes('mp4') || cleanMime.includes('m4a')
+              ? 'audio.m4a'
+              : cleanMime.includes('wav')
+                ? 'audio.wav'
+                : cleanMime.includes('webm')
+                  ? 'audio.webm'
+                  : 'audio.ogg';
+
+          messageContent = await transcribeAudio(agent, audioBuffer, cleanMime, fileName);
           console.log(`Transcribed audio: "${messageContent}"`);
         } else {
           console.log('Could not download audio');
