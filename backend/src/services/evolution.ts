@@ -72,22 +72,40 @@ export async function downloadMediaForAgent(instanceName: string, messageId: str
   try {
     const { apiUrl, apiKey } = await getAgentEvolutionCredentials(agent);
     
-    const response = await axios.get(
+    // Evolution API v2 uses POST with JSON body
+    const response = await axios.post(
       `${apiUrl}/chat/getBase64FromMediaMessage/${instanceName}`,
       {
-        headers: { 'apikey': apiKey },
-        params: { messageId },
+        message: {
+          key: {
+            id: messageId
+          }
+        },
+        convertToMp4: false
+      },
+      {
+        headers: { 
+          'apikey': apiKey,
+          'Content-Type': 'application/json'
+        },
         timeout: 60000,
       }
     );
 
+    // Response can have base64 directly or nested
     if (response.data?.base64) {
       return response.data.base64;
     }
     
+    // Some versions return it differently
+    if (typeof response.data === 'string' && response.data.length > 100) {
+      return response.data;
+    }
+    
+    console.log('Media download response structure:', Object.keys(response.data || {}));
     return null;
-  } catch (error) {
-    console.error('Error downloading media:', error);
+  } catch (error: any) {
+    console.error('Error downloading media:', error.response?.data || error.message);
     return null;
   }
 }
