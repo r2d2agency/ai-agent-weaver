@@ -41,6 +41,46 @@ export async function getAgentEvolutionCredentials(agent: any): Promise<{ apiUrl
   return getEvolutionCredentials();
 }
 
+// Send typing/recording presence indicator
+export async function sendPresence(
+  instanceName: string, 
+  phoneNumber: string, 
+  presence: 'composing' | 'recording' = 'composing',
+  agent?: any,
+  delayMs: number = 2000
+) {
+  try {
+    const { apiUrl, apiKey } = agent 
+      ? await getAgentEvolutionCredentials(agent)
+      : await getEvolutionCredentials();
+    
+    await axios.post(
+      `${apiUrl}/chat/sendPresence/${instanceName}`,
+      {
+        number: phoneNumber,
+        options: {
+          delay: delayMs,
+          presence: presence,
+        },
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': apiKey,
+        },
+        timeout: 10000,
+      }
+    );
+
+    console.log(`Presence '${presence}' sent to ${phoneNumber}`);
+    return true;
+  } catch (error: any) {
+    // Don't throw - presence is not critical
+    console.error('Evolution API presence error:', error.response?.data || error.message);
+    return false;
+  }
+}
+
 export async function sendMessage(instanceName: string, phoneNumber: string, message: string, agent?: any) {
   try {
     const { apiUrl, apiKey } = agent 
