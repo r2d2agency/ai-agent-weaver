@@ -11,11 +11,13 @@ import {
   LogOut
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBranding } from '@/contexts/BrandingContext';
 import { Button } from '@/components/ui/button';
 
 export function Sidebar() {
   const location = useLocation();
   const { user, isAdmin, logout } = useAuth();
+  const { systemName, logoUrl, iconUrl } = useBranding();
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
@@ -31,13 +33,27 @@ export function Sidebar() {
     <aside className="fixed left-0 top-0 h-screen w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
       <div className="p-6 border-b border-sidebar-border">
         <Link to="/" className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-emerald-600 flex items-center justify-center">
-            <Bot className="w-6 h-6 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="font-bold text-lg text-foreground">WhatsAgent</h1>
-            <p className="text-xs text-muted-foreground">AI Automation</p>
-          </div>
+          {logoUrl ? (
+            <img 
+              src={logoUrl} 
+              alt={systemName} 
+              className="h-10 object-contain"
+            />
+          ) : (
+            <>
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-emerald-600 flex items-center justify-center overflow-hidden">
+                {iconUrl ? (
+                  <img src={iconUrl} alt={systemName} className="w-full h-full object-cover" />
+                ) : (
+                  <Bot className="w-6 h-6 text-primary-foreground" />
+                )}
+              </div>
+              <div>
+                <h1 className="font-bold text-lg text-foreground">{systemName}</h1>
+                <p className="text-xs text-muted-foreground">AI Automation</p>
+              </div>
+            </>
+          )}
         </Link>
       </div>
 
