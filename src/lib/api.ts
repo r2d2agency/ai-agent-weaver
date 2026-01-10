@@ -67,6 +67,29 @@ export const updateAgent = (id: string, data: Partial<{
   status: string;
   evolutionApiUrl: string;
   evolutionApiKey: string;
+  audioEnabled: boolean;
+  imageEnabled: boolean;
+  documentEnabled: boolean;
+  widgetEnabled: boolean;
+  ghostMode: boolean;
+  takeoverTimeout: number;
+  inactivityEnabled: boolean;
+  inactivityTimeout: number;
+  inactivityMessage: string;
+  operatingHoursEnabled: boolean;
+  operatingHoursStart: string;
+  operatingHoursEnd: string;
+  operatingHoursTimezone: string;
+  outOfHoursMessage: string;
+  openaiApiKey: string;
+  openaiModel: string;
+  widgetAvatarUrl: string;
+  widgetPosition: string;
+  widgetTitle: string;
+  widgetPrimaryColor: string;
+  widgetSecondaryColor: string;
+  widgetBackgroundColor: string;
+  widgetTextColor: string;
 }>) => apiRequest<any>(`/api/agents/${id}`, {
   method: 'PUT',
   body: JSON.stringify(data),

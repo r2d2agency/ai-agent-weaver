@@ -69,6 +69,9 @@ agentsRouter.put('/:id', async (req, res) => {
       widgetAvatarUrl, widgetPosition, widgetTitle, widgetPrimaryColor, widgetSecondaryColor, widgetBackgroundColor, widgetTextColor
     } = req.body;
     
+    // Helper to convert undefined to null for proper COALESCE behavior
+    const toNull = (val: any) => val === undefined ? null : val;
+    
     const result = await query(
       `UPDATE agents 
        SET name = COALESCE($1, name),
@@ -106,7 +109,19 @@ agentsRouter.put('/:id', async (req, res) => {
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $33
        RETURNING *`,
-      [name, description, prompt, instanceName, webhookUrl, token, status, audioEnabled, imageEnabled, documentEnabled, widgetEnabled, ghostMode, takeoverTimeout, inactivityEnabled, inactivityTimeout, inactivityMessage, operatingHoursEnabled, operatingHoursStart, operatingHoursEnd, operatingHoursTimezone, outOfHoursMessage, evolutionApiUrl, evolutionApiKey, openaiApiKey, openaiModel, widgetAvatarUrl, widgetPosition, widgetTitle, widgetPrimaryColor, widgetSecondaryColor, widgetBackgroundColor, widgetTextColor, req.params.id]
+      [
+        toNull(name), toNull(description), toNull(prompt), toNull(instanceName), 
+        toNull(webhookUrl), toNull(token), toNull(status), toNull(audioEnabled), 
+        toNull(imageEnabled), toNull(documentEnabled), toNull(widgetEnabled), 
+        toNull(ghostMode), toNull(takeoverTimeout), toNull(inactivityEnabled), 
+        toNull(inactivityTimeout), toNull(inactivityMessage), toNull(operatingHoursEnabled), 
+        toNull(operatingHoursStart), toNull(operatingHoursEnd), toNull(operatingHoursTimezone), 
+        toNull(outOfHoursMessage), toNull(evolutionApiUrl), toNull(evolutionApiKey), 
+        toNull(openaiApiKey), toNull(openaiModel), toNull(widgetAvatarUrl), 
+        toNull(widgetPosition), toNull(widgetTitle), toNull(widgetPrimaryColor), 
+        toNull(widgetSecondaryColor), toNull(widgetBackgroundColor), toNull(widgetTextColor), 
+        req.params.id
+      ]
     );
     
     if (result.rows.length === 0) {
