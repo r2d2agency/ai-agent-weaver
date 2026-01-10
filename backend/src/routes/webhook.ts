@@ -300,6 +300,12 @@ async function processAndRespond(
     console.log(`Batched response sent to ${phoneNumber} (${messageParts.length} messages, ${mediaToSend?.length || 0} media)`);
   } catch (error) {
     console.error(`Error processing batched response for ${phoneNumber}:`, error);
+    // Fallback: never stay silent
+    try {
+      await sendMessage(instanceName, phoneNumber, 'Desculpe, tive um problema aqui e não consegui responder agora. Pode repetir a pergunta?', agent);
+    } catch (sendErr) {
+      console.error('Failed to send fallback message:', sendErr);
+    }
   }
 }
 

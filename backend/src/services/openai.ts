@@ -79,7 +79,7 @@ interface ResponseWithMedia {
 // Get media context for agent prompt
 async function getMediaContext(agentId: string): Promise<{ context: string; items: MediaItem[] }> {
   const result = await query(
-    `SELECT id, name, description, type, file_urls, mime_types FROM agent_media WHERE agent_id = $1`,
+    `SELECT id, name, description, media_type as type, file_urls, mime_types FROM agent_media WHERE agent_id = $1`,
     [agentId]
   );
   
@@ -190,17 +190,32 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
       userContent = userMessage;
     }
 
-    const response = await client.chat.completions.create({
-      model,
-      max_completion_tokens: 1000,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...history,
-        { role: 'user', content: userContent as any },
-      ],
-      tools: mediaItems.length > 0 ? mediaTools : undefined,
-      tool_choice: mediaItems.length > 0 ? 'auto' : undefined,
-    });
+    let response: any;
+    try {
+      response = await client.chat.completions.create({
+        model,
+        max_completion_tokens: 1000,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...history,
+          { role: 'user', content: userContent as any },
+        ],
+        tools: mediaItems.length > 0 ? mediaTools : undefined,
+        tool_choice: mediaItems.length > 0 ? 'auto' : undefined,
+      });
+    } catch (err) {
+      // Fallback: if the chosen model/config doesn't support tools or fails, retry without tools
+      console.error('OpenAI create failed (retrying without tools):', err);
+      response = await client.chat.completions.create({
+        model,
+        max_completion_tokens: 1000,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...history,
+          { role: 'user', content: userContent as any },
+        ],
+      });
+    }
 
     const message = response.choices[0]?.message;
     let textResponse = message?.content || '';
@@ -214,14 +229,14 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
             const args = JSON.parse(toolCall.function.arguments);
             const mediaNames: string[] = args.media_names || [];
             const additionalMessage: string = args.message || '';
-            
+
             console.log(`Tool call send_media with names: ${mediaNames.join(', ')}`);
-            
+
             // Find matching media items (more flexible matching)
             for (const name of mediaNames) {
               const found = mediaItems.find(
-                m => m.name.toLowerCase().includes(name.toLowerCase()) ||
-                     name.toLowerCase().includes(m.name.toLowerCase())
+                m => m.name.toLowerCase().includes(String(name).toLowerCase()) ||
+                     String(name).toLowerCase().includes(m.name.toLowerCase())
               );
               if (found) {
                 mediaToSend.push(found);
@@ -230,34 +245,22 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
                 console.log(`Media not found: ${name}`);
               }
             }
-            
-            if (additionalMessage) {
-              textResponse = additionalMessage;
-            }
+
+            if (additionalMessage) textResponse = additionalMessage;
           } catch (e) {
             console.error('Error parsing tool call:', e);
           }
         }
       }
-      
-      // Always generate a text response when using tools
+
+      // Always have a text response when tools are used
       if (mediaToSend.length > 0 && !textResponse) {
-        const mediaNames = mediaToSend.map(m => m.name).join(', ');
-        textResponse = `Aqui está o que você pediu! 📸`;
-      } else if (mediaToSend.length === 0 && !textResponse) {
-        // Tool was called but media not found - generate helpful response
-        const followUp = await client.chat.completions.create({
-          model,
-          max_completion_tokens: 300,
-          messages: [
-            { role: 'system', content: agent.prompt },
-            ...history,
-            { role: 'user', content: userMessage },
-            { role: 'assistant', content: '', tool_calls: message.tool_calls } as any,
-            { role: 'tool', tool_call_id: message.tool_calls[0].id, content: 'Mídia não encontrada na galeria.' }
-          ]
-        });
-        textResponse = followUp.choices[0]?.message?.content || 'Desculpe, não encontrei essa mídia na nossa galeria. Posso ajudar com algo mais?';
+        textResponse = 'Perfeito — vou te enviar agora.';
+      }
+
+      // Tool was called but nothing matched: never attempt an extra tool-followup completion here (can break and freeze)
+      if (mediaToSend.length === 0 && !textResponse) {
+        textResponse = 'Entendi. Não encontrei esse item na minha galeria agora. Você pode me dizer o nome do produto ou mandar mais detalhes/foto?';
       }
     }
 
