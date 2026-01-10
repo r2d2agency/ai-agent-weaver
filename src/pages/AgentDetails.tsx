@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, File, Key, Link2 } from 'lucide-react';
+import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, File, Key, Link2, Upload, Palette } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,13 @@ const AgentDetailsPage = () => {
     imageEnabled: true,
     documentEnabled: true,
     widgetEnabled: false,
+    widgetAvatarUrl: '',
+    widgetPosition: 'right',
+    widgetTitle: 'Assistente',
+    widgetPrimaryColor: '#667eea',
+    widgetSecondaryColor: '#764ba2',
+    widgetBackgroundColor: '#ffffff',
+    widgetTextColor: '#333333',
     ghostMode: false,
     takeoverTimeout: 60,
     inactivityEnabled: false,
@@ -79,6 +86,13 @@ const AgentDetailsPage = () => {
         imageEnabled: agentData.image_enabled !== false,
         documentEnabled: agentData.document_enabled !== false,
         widgetEnabled: agentData.widget_enabled === true,
+        widgetAvatarUrl: agentData.widget_avatar_url || '',
+        widgetPosition: agentData.widget_position || 'right',
+        widgetTitle: agentData.widget_title || 'Assistente',
+        widgetPrimaryColor: agentData.widget_primary_color || '#667eea',
+        widgetSecondaryColor: agentData.widget_secondary_color || '#764ba2',
+        widgetBackgroundColor: agentData.widget_background_color || '#ffffff',
+        widgetTextColor: agentData.widget_text_color || '#333333',
         ghostMode: agentData.ghost_mode === true,
         takeoverTimeout: agentData.takeover_timeout || 60,
         inactivityEnabled: agentData.inactivity_enabled === true,
@@ -923,21 +937,207 @@ const AgentDetailsPage = () => {
               Adicione este agente como um chat em seu site.
             </p>
             {formData.widgetEnabled && (
-              <div className="space-y-2">
-                <Label className="text-xs">Código de Incorporação</Label>
-                <div className="flex gap-2">
+              <div className="space-y-4">
+                {/* Avatar Upload */}
+                <div className="space-y-2">
+                  <Label className="text-xs flex items-center gap-2">
+                    <Upload className="w-3 h-3" />
+                    Avatar do Widget
+                  </Label>
+                  <div className="flex items-center gap-3">
+                    {formData.widgetAvatarUrl ? (
+                      <div className="w-12 h-12 rounded-full overflow-hidden bg-muted border border-border">
+                        <img 
+                          src={formData.widgetAvatarUrl} 
+                          alt="Avatar" 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-muted border border-border flex items-center justify-center">
+                        <Bot className="w-6 h-6 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        className="text-xs"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              const base64 = reader.result as string;
+                              setFormData(prev => ({ ...prev, widgetAvatarUrl: base64 }));
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                  {formData.widgetAvatarUrl && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs text-destructive"
+                      onClick={() => setFormData(prev => ({ ...prev, widgetAvatarUrl: '' }))}
+                    >
+                      Remover avatar
+                    </Button>
+                  )}
+                </div>
+
+                {/* Widget Title */}
+                <div className="space-y-2">
+                  <Label className="text-xs">Título do Chat</Label>
                   <Input
-                    readOnly
-                    value={`<script src="${API_BASE_URL}/api/widget/embed/${id}"></script>`}
-                    className="bg-muted border-border text-xs font-mono"
+                    value={formData.widgetTitle}
+                    onChange={(e) => setFormData(prev => ({ ...prev, widgetTitle: e.target.value }))}
+                    placeholder="Assistente"
+                    className="bg-muted border-border text-sm"
                   />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={copyEmbedCode}
-                  >
-                    {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-                  </Button>
+                </div>
+
+                {/* Position */}
+                <div className="space-y-2">
+                  <Label className="text-xs">Posição na Tela</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={formData.widgetPosition === 'left' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setFormData(prev => ({ ...prev, widgetPosition: 'left' }))}
+                      className="flex-1"
+                    >
+                      Esquerda
+                    </Button>
+                    <Button
+                      variant={formData.widgetPosition === 'right' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setFormData(prev => ({ ...prev, widgetPosition: 'right' }))}
+                      className="flex-1"
+                    >
+                      Direita
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Colors */}
+                <div className="space-y-2">
+                  <Label className="text-xs flex items-center gap-2">
+                    <Palette className="w-3 h-3" />
+                    Cores do Widget
+                  </Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Cor Primária</Label>
+                      <div className="flex gap-2">
+                        <input
+                          type="color"
+                          value={formData.widgetPrimaryColor}
+                          onChange={(e) => setFormData(prev => ({ ...prev, widgetPrimaryColor: e.target.value }))}
+                          className="w-8 h-8 rounded cursor-pointer border-0"
+                        />
+                        <Input
+                          value={formData.widgetPrimaryColor}
+                          onChange={(e) => setFormData(prev => ({ ...prev, widgetPrimaryColor: e.target.value }))}
+                          className="bg-muted border-border text-xs font-mono flex-1"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Cor Secundária</Label>
+                      <div className="flex gap-2">
+                        <input
+                          type="color"
+                          value={formData.widgetSecondaryColor}
+                          onChange={(e) => setFormData(prev => ({ ...prev, widgetSecondaryColor: e.target.value }))}
+                          className="w-8 h-8 rounded cursor-pointer border-0"
+                        />
+                        <Input
+                          value={formData.widgetSecondaryColor}
+                          onChange={(e) => setFormData(prev => ({ ...prev, widgetSecondaryColor: e.target.value }))}
+                          className="bg-muted border-border text-xs font-mono flex-1"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Fundo</Label>
+                      <div className="flex gap-2">
+                        <input
+                          type="color"
+                          value={formData.widgetBackgroundColor}
+                          onChange={(e) => setFormData(prev => ({ ...prev, widgetBackgroundColor: e.target.value }))}
+                          className="w-8 h-8 rounded cursor-pointer border-0"
+                        />
+                        <Input
+                          value={formData.widgetBackgroundColor}
+                          onChange={(e) => setFormData(prev => ({ ...prev, widgetBackgroundColor: e.target.value }))}
+                          className="bg-muted border-border text-xs font-mono flex-1"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Texto</Label>
+                      <div className="flex gap-2">
+                        <input
+                          type="color"
+                          value={formData.widgetTextColor}
+                          onChange={(e) => setFormData(prev => ({ ...prev, widgetTextColor: e.target.value }))}
+                          className="w-8 h-8 rounded cursor-pointer border-0"
+                        />
+                        <Input
+                          value={formData.widgetTextColor}
+                          onChange={(e) => setFormData(prev => ({ ...prev, widgetTextColor: e.target.value }))}
+                          className="bg-muted border-border text-xs font-mono flex-1"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Save Widget Settings */}
+                <Button
+                  onClick={() => {
+                    if (!id) return;
+                    updateAgentMutation.mutate({
+                      id,
+                      data: {
+                        widgetAvatarUrl: formData.widgetAvatarUrl,
+                        widgetPosition: formData.widgetPosition,
+                        widgetTitle: formData.widgetTitle,
+                        widgetPrimaryColor: formData.widgetPrimaryColor,
+                        widgetSecondaryColor: formData.widgetSecondaryColor,
+                        widgetBackgroundColor: formData.widgetBackgroundColor,
+                        widgetTextColor: formData.widgetTextColor,
+                      } as any,
+                    });
+                  }}
+                  disabled={updateAgentMutation.isPending}
+                  className="w-full btn-primary-gradient"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  Salvar Aparência
+                </Button>
+
+                {/* Embed Code */}
+                <div className="space-y-2 pt-4 border-t border-border">
+                  <Label className="text-xs">Código de Incorporação</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      readOnly
+                      value={`<script src="${API_BASE_URL}/api/widget/embed/${id}"></script>`}
+                      className="bg-muted border-border text-xs font-mono"
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={copyEmbedCode}
+                    >
+                      {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}

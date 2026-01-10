@@ -65,7 +65,8 @@ agentsRouter.put('/:id', async (req, res) => {
       audioEnabled, imageEnabled, documentEnabled, widgetEnabled, ghostMode, takeoverTimeout,
       inactivityEnabled, inactivityTimeout, inactivityMessage,
       operatingHoursEnabled, operatingHoursStart, operatingHoursEnd, operatingHoursTimezone, outOfHoursMessage,
-      evolutionApiUrl, evolutionApiKey, openaiApiKey, openaiModel
+      evolutionApiUrl, evolutionApiKey, openaiApiKey, openaiModel,
+      widgetAvatarUrl, widgetPosition, widgetTitle, widgetPrimaryColor, widgetSecondaryColor, widgetBackgroundColor, widgetTextColor
     } = req.body;
     
     const result = await query(
@@ -95,10 +96,17 @@ agentsRouter.put('/:id', async (req, res) => {
            evolution_api_key = COALESCE($23, evolution_api_key),
            openai_api_key = COALESCE($24, openai_api_key),
            openai_model = COALESCE($25, openai_model),
+           widget_avatar_url = COALESCE($26, widget_avatar_url),
+           widget_position = COALESCE($27, widget_position),
+           widget_title = COALESCE($28, widget_title),
+           widget_primary_color = COALESCE($29, widget_primary_color),
+           widget_secondary_color = COALESCE($30, widget_secondary_color),
+           widget_background_color = COALESCE($31, widget_background_color),
+           widget_text_color = COALESCE($32, widget_text_color),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $26
+       WHERE id = $33
        RETURNING *`,
-      [name, description, prompt, instanceName, webhookUrl, token, status, audioEnabled, imageEnabled, documentEnabled, widgetEnabled, ghostMode, takeoverTimeout, inactivityEnabled, inactivityTimeout, inactivityMessage, operatingHoursEnabled, operatingHoursStart, operatingHoursEnd, operatingHoursTimezone, outOfHoursMessage, evolutionApiUrl, evolutionApiKey, openaiApiKey, openaiModel, req.params.id]
+      [name, description, prompt, instanceName, webhookUrl, token, status, audioEnabled, imageEnabled, documentEnabled, widgetEnabled, ghostMode, takeoverTimeout, inactivityEnabled, inactivityTimeout, inactivityMessage, operatingHoursEnabled, operatingHoursStart, operatingHoursEnd, operatingHoursTimezone, outOfHoursMessage, evolutionApiUrl, evolutionApiKey, openaiApiKey, openaiModel, widgetAvatarUrl, widgetPosition, widgetTitle, widgetPrimaryColor, widgetSecondaryColor, widgetBackgroundColor, widgetTextColor, req.params.id]
     );
     
     if (result.rows.length === 0) {
