@@ -215,13 +215,19 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
             const mediaNames: string[] = args.media_names || [];
             const additionalMessage: string = args.message || '';
             
-            // Find matching media items
+            console.log(`Tool call send_media with names: ${mediaNames.join(', ')}`);
+            
+            // Find matching media items (more flexible matching)
             for (const name of mediaNames) {
               const found = mediaItems.find(
-                m => m.name.toLowerCase() === name.toLowerCase()
+                m => m.name.toLowerCase().includes(name.toLowerCase()) ||
+                     name.toLowerCase().includes(m.name.toLowerCase())
               );
               if (found) {
                 mediaToSend.push(found);
+                console.log(`Found media: ${found.name}`);
+              } else {
+                console.log(`Media not found: ${name}`);
               }
             }
             
@@ -234,17 +240,24 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
         }
       }
       
-      // If we have media but no text, generate a follow-up
+      // Always generate a text response when using tools
       if (mediaToSend.length > 0 && !textResponse) {
+        const mediaNames = mediaToSend.map(m => m.name).join(', ');
+        textResponse = `Aqui está o que você pediu! 📸`;
+      } else if (mediaToSend.length === 0 && !textResponse) {
+        // Tool was called but media not found - generate helpful response
         const followUp = await client.chat.completions.create({
           model,
-          max_completion_tokens: 200,
+          max_completion_tokens: 300,
           messages: [
-            { role: 'system', content: 'Você está enviando fotos/vídeos de produtos. Gere uma mensagem curta e amigável para acompanhar.' },
-            { role: 'user', content: `Gerando mensagem para: ${mediaToSend.map(m => m.name).join(', ')}` }
+            { role: 'system', content: agent.prompt },
+            ...history,
+            { role: 'user', content: userMessage },
+            { role: 'assistant', content: '', tool_calls: message.tool_calls } as any,
+            { role: 'tool', tool_call_id: message.tool_calls[0].id, content: 'Mídia não encontrada na galeria.' }
           ]
         });
-        textResponse = followUp.choices[0]?.message?.content || 'Aqui está o que você pediu! 📸';
+        textResponse = followUp.choices[0]?.message?.content || 'Desculpe, não encontrei essa mídia na nossa galeria. Posso ajudar com algo mais?';
       }
     }
 
