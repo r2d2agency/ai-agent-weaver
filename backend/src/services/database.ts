@@ -79,8 +79,8 @@ export async function initDatabase() {
     
     if (adminCheck.rows.length === 0) {
       // Default password: admin123 (should be changed on first login)
-      const bcrypt = await import('bcryptjs');
-      const hashedPassword = await bcrypt.hash('admin123', 10);
+      const { hash } = await import('bcryptjs');
+      const hashedPassword = await hash('admin123', 10);
       await client.query(
         `INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, $4)`,
         ['admin@whatsagent.com', hashedPassword, 'Administrador', 'admin']

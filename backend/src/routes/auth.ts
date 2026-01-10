@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
+import { compare, hash } from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { query } from '../services/database.js';
 
@@ -26,7 +26,7 @@ authRouter.post('/login', async (req, res) => {
     }
 
     const user = result.rows[0];
-    const validPassword = await bcrypt.compare(password, user.password_hash);
+    const validPassword = await compare(password, user.password_hash);
 
     if (!validPassword) {
       return res.status(401).json({ error: 'Credenciais inválidas' });
@@ -101,7 +101,7 @@ authRouter.post('/users', async (req, res) => {
       return res.status(400).json({ error: 'Email, senha e nome são obrigatórios' });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await hash(password, 10);
 
     const result = await query(
       `INSERT INTO users (email, password_hash, name, role) 
@@ -211,7 +211,7 @@ authRouter.put('/users/:id', async (req, res) => {
 
     if (password) {
       paramCount++;
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const hashedPassword = await hash(password, 10);
       updateQuery += `, password_hash = $${paramCount}`;
       params.push(hashedPassword);
     }
