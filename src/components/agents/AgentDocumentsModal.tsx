@@ -38,9 +38,11 @@ export function AgentDocumentsModal({ open, onOpenChange, agent }: AgentDocument
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
   const [newDocName, setNewDocName] = useState('');
   const [newDocContent, setNewDocContent] = useState('');
   const [isAddingManual, setIsAddingManual] = useState(false);
+  const [isUploadingPDF, setIsUploadingPDF] = useState(false);
 
   const { data: documents = [], isLoading } = useQuery({
     queryKey: ['documents', agent?.id],
@@ -72,6 +74,33 @@ export function AgentDocumentsModal({ open, onOpenChange, agent }: AgentDocument
     },
     onError: () => {
       toast({ title: 'Erro', description: 'Não foi possível salvar o documento.', variant: 'destructive' });
+    },
+  });
+
+  const uploadPDFMutation = useMutation({
+    mutationFn: async (data: { name: string; base64Data: string }) => {
+      const response = await fetch(`${API_BASE_URL}/api/documents/agent/${agent?.id}/pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to process PDF');
+      return result;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['documents', agent?.id] });
+      toast({ 
+        title: 'PDF processado!', 
+        description: data.message || `Texto extraído e adicionado à base de conhecimento.` 
+      });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: 'Erro ao processar PDF', 
+        description: error.message || 'Não foi possível extrair texto do PDF.', 
+        variant: 'destructive' 
+      });
     },
   });
 
@@ -108,6 +137,36 @@ export function AgentDocumentsModal({ open, onOpenChange, agent }: AgentDocument
     }
   };
 
+  const handlePDFUpload = async (files: FileList) => {
+    setIsUploadingPDF(true);
+    for (const file of Array.from(files)) {
+      try {
+        // Read file as base64
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve, reject) => {
+          reader.onload = () => {
+            const result = reader.result as string;
+            // Remove data:application/pdf;base64, prefix
+            const base64 = result.split(',')[1];
+            resolve(base64);
+          };
+          reader.onerror = reject;
+        });
+        reader.readAsDataURL(file);
+        const base64Data = await base64Promise;
+
+        await uploadPDFMutation.mutateAsync({
+          name: file.name,
+          base64Data,
+        });
+      } catch (error) {
+        // Error already handled by mutation
+      }
+    }
+    setIsUploadingPDF(false);
+    if (pdfInputRef.current) pdfInputRef.current.value = '';
+  };
+
   const handleManualAdd = () => {
     if (!newDocName.trim() || !newDocContent.trim()) {
       toast({
@@ -142,7 +201,40 @@ export function AgentDocumentsModal({ open, onOpenChange, agent }: AgentDocument
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden flex flex-col gap-4">
-          {/* Upload Area */}
+          {/* PDF Upload Area */}
+          <div className="border-2 border-dashed border-primary/50 rounded-lg p-4 text-center bg-primary/5 hover:bg-primary/10 transition-colors">
+            <input
+              ref={pdfInputRef}
+              type="file"
+              accept=".pdf"
+              onChange={(e) => e.target.files && handlePDFUpload(e.target.files)}
+              className="hidden"
+            />
+            {isUploadingPDF || uploadPDFMutation.isPending ? (
+              <div className="flex items-center justify-center gap-2">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                <span className="text-sm text-primary font-medium">Processando PDF...</span>
+              </div>
+            ) : (
+              <>
+                <FileText className="w-8 h-8 text-primary mx-auto mb-2" />
+                <p className="text-sm font-medium text-primary mb-1">
+                  Treinar agente com PDF
+                </p>
+                <button
+                  className="text-sm text-primary hover:underline"
+                  onClick={() => pdfInputRef.current?.click()}
+                >
+                  Clique para enviar um PDF
+                </button>
+                <p className="text-xs text-muted-foreground mt-1">
+                  O texto será extraído automaticamente para RAG
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* Text Files Upload Area */}
           <div className="border-2 border-dashed border-border rounded-lg p-4 text-center hover:border-primary/50 transition-colors">
             <input
               ref={fileInputRef}
@@ -152,14 +244,13 @@ export function AgentDocumentsModal({ open, onOpenChange, agent }: AgentDocument
               onChange={(e) => e.target.files && handleFileUpload(e.target.files)}
               className="hidden"
             />
-            <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground mb-2">
-              Arraste arquivos ou{' '}
+            <Upload className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">
               <button
                 className="text-primary hover:underline"
                 onClick={() => fileInputRef.current?.click()}
               >
-                clique para selecionar
+                Enviar arquivos de texto
               </button>
             </p>
             <p className="text-xs text-muted-foreground">TXT, MD, JSON, CSV</p>
