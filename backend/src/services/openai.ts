@@ -144,6 +144,65 @@ async function saveContactCollectedData(phoneNumber: string, data: Record<string
   }
 }
 
+// Cart item interface
+interface CartItem {
+  productName: string;
+  productId: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+// Get cart from contact
+async function getContactCart(phoneNumber: string): Promise<CartItem[]> {
+  try {
+    const result = await query(
+      `SELECT collected_data FROM contacts WHERE phone_number = $1`,
+      [phoneNumber]
+    );
+    if (result.rows.length > 0 && result.rows[0].collected_data) {
+      const data = result.rows[0].collected_data;
+      if (data._cart && Array.isArray(data._cart)) {
+        return data._cart;
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching contact cart:', error);
+  }
+  return [];
+}
+
+// Save cart to contact
+async function saveContactCart(phoneNumber: string, cart: CartItem[]): Promise<void> {
+  try {
+    await query(
+      `INSERT INTO contacts (phone_number, collected_data) 
+       VALUES ($1, $2)
+       ON CONFLICT (phone_number) 
+       DO UPDATE SET 
+         collected_data = COALESCE(contacts.collected_data, '{}'::jsonb) || $2,
+         updated_at = CURRENT_TIMESTAMP`,
+      [phoneNumber, JSON.stringify({ _cart: cart })]
+    );
+  } catch (error) {
+    console.error('Error saving contact cart:', error);
+  }
+}
+
+// Clear cart from contact
+async function clearContactCart(phoneNumber: string): Promise<void> {
+  try {
+    await query(
+      `UPDATE contacts 
+       SET collected_data = collected_data - '_cart',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE phone_number = $1`,
+      [phoneNumber]
+    );
+  } catch (error) {
+    console.error('Error clearing contact cart:', error);
+  }
+}
+
 // Get media context for agent prompt
 async function getMediaContext(agentId: string): Promise<{ context: string; items: MediaItem[] }> {
   const result = await query(
@@ -240,27 +299,134 @@ async function getProductsContext(agentId: string): Promise<{ context: string; i
   
   const context = `\n\n## 📦 Catálogo de Produtos Disponíveis:\n${productList}
 
-## REGRAS PARA CONSULTA E CÁLCULO DE PRODUTOS:
-1. Use a função "calculate_order" para calcular o total de um pedido com múltiplos produtos.
-2. Sempre confirme os produtos e quantidades com o cliente antes de calcular.
-3. Se o cliente perguntar preço, informe o valor unitário do catálogo acima.
-4. Para pedidos, some os valores usando calculate_order passando a lista de produtos e quantidades.
-5. Se um produto não estiver no catálogo, informe que não está disponível.
-6. Produtos com 📷 possuem foto - use a função "send_product_image" para enviar a imagem quando o cliente perguntar sobre o produto ou pedir para ver.
+## 🛒 SISTEMA DE CARRINHO/PEDIDO:
+Você possui um sistema de carrinho que armazena os produtos que o cliente vai pedindo durante a conversa.
 
-Exemplo de uso: calculate_order com items: [{"name": "Produto X", "quantity": 2}, {"name": "Produto Y", "quantity": 1}]
-Exemplo de imagem: send_product_image com product_name: "Produto X"`;
+### Ferramentas disponíveis:
+1. **add_to_cart** - Adiciona um produto ao carrinho. Use quando o cliente pedir/quiser um produto.
+2. **remove_from_cart** - Remove um produto do carrinho. Use quando o cliente desistir de um item.
+3. **view_cart** - Mostra o carrinho atual com todos os itens e o total. Use para confirmar pedidos ou quando o cliente perguntar o que tem no carrinho.
+4. **clear_cart** - Limpa todo o carrinho. Use quando o cliente quiser começar de novo ou após finalizar um pedido.
+5. **confirm_order** - Confirma o pedido e gera um resumo final. Use quando o cliente confirmar que quer finalizar.
+
+### Fluxo recomendado:
+1. Quando o cliente mencionar produtos, use add_to_cart para cada item
+2. Pergunte se deseja mais alguma coisa
+3. Use view_cart para mostrar o resumo antes de confirmar
+4. Quando o cliente confirmar, use confirm_order
+5. Após a confirmação, o carrinho é limpo automaticamente para novos pedidos
+
+### Exemplos de uso:
+- Cliente: "quero 2 pizzas e 3 cervejas" → add_to_cart para cada produto
+- Cliente: "tira a cerveja" → remove_from_cart
+- Cliente: "quanto deu?" → view_cart
+- Cliente: "isso mesmo, pode confirmar" → confirm_order
+
+Produtos com 📷 possuem foto - use "send_product_image" para enviar a imagem.`;
   
   return { context, items };
 }
 
 
-// Tool for calculating orders
+// Tool for adding items to cart
+const addToCartTool = {
+  type: 'function' as const,
+  function: {
+    name: 'add_to_cart',
+    description: 'Adiciona um produto ao carrinho do cliente. Use quando o cliente pedir/quiser um produto. O carrinho é mantido na memória durante toda a conversa.',
+    parameters: {
+      type: 'object',
+      properties: {
+        product_name: {
+          type: 'string',
+          description: 'Nome do produto conforme listado no catálogo'
+        },
+        quantity: {
+          type: 'number',
+          description: 'Quantidade do produto (padrão: 1)'
+        }
+      },
+      required: ['product_name']
+    }
+  }
+};
+
+// Tool for removing items from cart
+const removeFromCartTool = {
+  type: 'function' as const,
+  function: {
+    name: 'remove_from_cart',
+    description: 'Remove um produto do carrinho do cliente. Use quando o cliente desistir de um item ou quiser remover algo.',
+    parameters: {
+      type: 'object',
+      properties: {
+        product_name: {
+          type: 'string',
+          description: 'Nome do produto a remover'
+        },
+        quantity: {
+          type: 'number',
+          description: 'Quantidade a remover (se não informado, remove todo o item)'
+        }
+      },
+      required: ['product_name']
+    }
+  }
+};
+
+// Tool for viewing cart
+const viewCartTool = {
+  type: 'function' as const,
+  function: {
+    name: 'view_cart',
+    description: 'Mostra o carrinho atual do cliente com todos os itens, quantidades, valores individuais e total. Use para revisar o pedido antes de confirmar ou quando o cliente perguntar o que tem no carrinho.',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  }
+};
+
+// Tool for clearing cart
+const clearCartTool = {
+  type: 'function' as const,
+  function: {
+    name: 'clear_cart',
+    description: 'Limpa todo o carrinho do cliente. Use quando o cliente quiser começar de novo ou cancelar tudo.',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  }
+};
+
+// Tool for confirming order
+const confirmOrderTool = {
+  type: 'function' as const,
+  function: {
+    name: 'confirm_order',
+    description: 'Confirma o pedido atual e gera um resumo final. Após a confirmação, o carrinho é limpo automaticamente para novos pedidos. Use quando o cliente confirmar que quer finalizar o pedido.',
+    parameters: {
+      type: 'object',
+      properties: {
+        customer_notes: {
+          type: 'string',
+          description: 'Observações do cliente (endereço, forma de pagamento, horário, etc.)'
+        }
+      },
+      required: []
+    }
+  }
+};
+
+// Legacy tool for calculating orders (kept for backward compatibility)
 const calculateOrderTool = {
   type: 'function' as const,
   function: {
     name: 'calculate_order',
-    description: 'Calcula o total de um pedido com base nos produtos e quantidades informados. Use quando o cliente quiser saber o valor total de múltiplos produtos ou confirmar um pedido.',
+    description: 'LEGADO - Prefira usar add_to_cart + view_cart. Calcula o total de um pedido com base nos produtos e quantidades informados.',
     parameters: {
       type: 'object',
       properties: {
@@ -566,7 +732,13 @@ Inclua também a mensagem atual do cliente no conversation_history.
       availableTools.push(...mediaTools);
     }
     if (productItems.length > 0) {
-      availableTools.push(calculateOrderTool);
+      // Add cart tools
+      availableTools.push(addToCartTool);
+      availableTools.push(removeFromCartTool);
+      availableTools.push(viewCartTool);
+      availableTools.push(clearCartTool);
+      availableTools.push(confirmOrderTool);
+      availableTools.push(calculateOrderTool); // Legacy, kept for backward compat
       // Add send_product_image tool if any product has an image
       const hasProductImages = productItems.some(p => p.image_url);
       if (hasProductImages) {
@@ -915,6 +1087,240 @@ Inclua também a mensagem atual do cliente no conversation_history.
             await createLog(agent.id, 'error', 'Erro ao processar send_product_image', { error: String(e) }, phoneNumber, 'whatsapp');
           }
         }
+
+        // Handle add_to_cart tool call
+        if (toolCall.function.name === 'add_to_cart') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const productName: string = args.product_name || '';
+            const quantity: number = args.quantity || 1;
+
+            console.log('=== add_to_cart Tool Call ===');
+            console.log('Product name:', productName, 'Quantity:', quantity);
+
+            // Find matching product
+            const product = productItems.find(
+              p => p.name.toLowerCase() === productName.toLowerCase() ||
+                   p.name.toLowerCase().includes(productName.toLowerCase()) ||
+                   productName.toLowerCase().includes(p.name.toLowerCase())
+            );
+
+            if (product) {
+              const unitPrice = typeof product.price === 'number' ? product.price : parseFloat(String(product.price));
+              const safeUnitPrice = Number.isFinite(unitPrice) ? unitPrice : 0;
+
+              // Get current cart
+              const currentCart = await getContactCart(phoneNumber);
+              
+              // Check if product already in cart
+              const existingIndex = currentCart.findIndex(item => item.productId === product.id);
+              if (existingIndex >= 0) {
+                currentCart[existingIndex].quantity += quantity;
+              } else {
+                currentCart.push({
+                  productName: product.name,
+                  productId: product.id,
+                  quantity,
+                  unitPrice: safeUnitPrice,
+                });
+              }
+
+              // Save updated cart
+              await saveContactCart(phoneNumber, currentCart);
+
+              const totalItems = currentCart.reduce((sum, item) => sum + item.quantity, 0);
+              const cartTotal = currentCart.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+
+              toolSuggestedMessage = `✅ Adicionado: ${quantity}x ${product.name} (R$ ${safeUnitPrice.toFixed(2)} cada)\n\n🛒 Carrinho: ${totalItems} item(s) | Total: R$ ${cartTotal.toFixed(2)}\n\nDeseja mais alguma coisa?`;
+
+              await createLog(
+                agent.id,
+                'tool_call',
+                `Tool: add_to_cart - ${quantity}x ${product.name}`,
+                { productName: product.name, quantity, cartTotal, totalItems },
+                phoneNumber,
+                'whatsapp'
+              );
+            } else {
+              toolSuggestedMessage = `Desculpe, não encontrei "${productName}" no catálogo. Posso te ajudar com outro produto?`;
+            }
+          } catch (e) {
+            console.error('Error parsing add_to_cart tool call:', e);
+            await createLog(agent.id, 'error', 'Erro ao processar add_to_cart', { error: String(e) }, phoneNumber, 'whatsapp');
+          }
+        }
+
+        // Handle remove_from_cart tool call
+        if (toolCall.function.name === 'remove_from_cart') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const productName: string = args.product_name || '';
+            const quantity: number | undefined = args.quantity;
+
+            console.log('=== remove_from_cart Tool Call ===');
+            console.log('Product name:', productName, 'Quantity:', quantity);
+
+            // Get current cart
+            const currentCart = await getContactCart(phoneNumber);
+            
+            // Find item in cart
+            const existingIndex = currentCart.findIndex(
+              item => item.productName.toLowerCase().includes(productName.toLowerCase()) ||
+                      productName.toLowerCase().includes(item.productName.toLowerCase())
+            );
+
+            if (existingIndex >= 0) {
+              const item = currentCart[existingIndex];
+              if (quantity && quantity < item.quantity) {
+                currentCart[existingIndex].quantity -= quantity;
+                toolSuggestedMessage = `✅ Removido: ${quantity}x ${item.productName}`;
+              } else {
+                currentCart.splice(existingIndex, 1);
+                toolSuggestedMessage = `✅ ${item.productName} removido do carrinho`;
+              }
+
+              // Save updated cart
+              await saveContactCart(phoneNumber, currentCart);
+
+              if (currentCart.length > 0) {
+                const totalItems = currentCart.reduce((sum, i) => sum + i.quantity, 0);
+                const cartTotal = currentCart.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0);
+                toolSuggestedMessage += `\n\n🛒 Carrinho: ${totalItems} item(s) | Total: R$ ${cartTotal.toFixed(2)}`;
+              } else {
+                toolSuggestedMessage += `\n\n🛒 Carrinho vazio`;
+              }
+
+              await createLog(
+                agent.id,
+                'tool_call',
+                `Tool: remove_from_cart - ${productName}`,
+                { productName, quantityRemoved: quantity || 'all' },
+                phoneNumber,
+                'whatsapp'
+              );
+            } else {
+              toolSuggestedMessage = `Não encontrei "${productName}" no seu carrinho.`;
+            }
+          } catch (e) {
+            console.error('Error parsing remove_from_cart tool call:', e);
+            await createLog(agent.id, 'error', 'Erro ao processar remove_from_cart', { error: String(e) }, phoneNumber, 'whatsapp');
+          }
+        }
+
+        // Handle view_cart tool call
+        if (toolCall.function.name === 'view_cart') {
+          try {
+            console.log('=== view_cart Tool Call ===');
+
+            // Get current cart
+            const currentCart = await getContactCart(phoneNumber);
+
+            if (currentCart.length === 0) {
+              toolSuggestedMessage = '🛒 Seu carrinho está vazio.\n\nQue tal adicionar alguns produtos?';
+            } else {
+              let cartSummary = '🛒 *Seu Carrinho*\n\n';
+              let cartTotal = 0;
+
+              for (const item of currentCart) {
+                const subtotal = item.quantity * item.unitPrice;
+                cartTotal += subtotal;
+                cartSummary += `• ${item.quantity}x ${item.productName}\n  R$ ${item.unitPrice.toFixed(2)} cada = R$ ${subtotal.toFixed(2)}\n`;
+              }
+
+              cartSummary += `\n💰 *Total: R$ ${cartTotal.toFixed(2)}*`;
+              cartSummary += `\n\nDeseja confirmar o pedido ou adicionar mais itens?`;
+
+              toolSuggestedMessage = cartSummary;
+
+              await createLog(
+                agent.id,
+                'tool_call',
+                `Tool: view_cart - ${currentCart.length} itens, Total R$ ${cartTotal.toFixed(2)}`,
+                { cartItems: currentCart, total: cartTotal },
+                phoneNumber,
+                'whatsapp'
+              );
+            }
+          } catch (e) {
+            console.error('Error parsing view_cart tool call:', e);
+            await createLog(agent.id, 'error', 'Erro ao processar view_cart', { error: String(e) }, phoneNumber, 'whatsapp');
+          }
+        }
+
+        // Handle clear_cart tool call
+        if (toolCall.function.name === 'clear_cart') {
+          try {
+            console.log('=== clear_cart Tool Call ===');
+
+            await clearContactCart(phoneNumber);
+            toolSuggestedMessage = '🗑️ Carrinho limpo!\n\nPodemos começar um novo pedido quando quiser.';
+
+            await createLog(
+              agent.id,
+              'tool_call',
+              'Tool: clear_cart',
+              {},
+              phoneNumber,
+              'whatsapp'
+            );
+          } catch (e) {
+            console.error('Error parsing clear_cart tool call:', e);
+            await createLog(agent.id, 'error', 'Erro ao processar clear_cart', { error: String(e) }, phoneNumber, 'whatsapp');
+          }
+        }
+
+        // Handle confirm_order tool call
+        if (toolCall.function.name === 'confirm_order') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const customerNotes: string = args.customer_notes || '';
+
+            console.log('=== confirm_order Tool Call ===');
+            console.log('Customer notes:', customerNotes);
+
+            // Get current cart
+            const currentCart = await getContactCart(phoneNumber);
+
+            if (currentCart.length === 0) {
+              toolSuggestedMessage = '⚠️ Seu carrinho está vazio. Adicione produtos antes de confirmar o pedido.';
+            } else {
+              let orderSummary = '✅ *PEDIDO CONFIRMADO!*\n\n';
+              orderSummary += '📋 *Itens do Pedido:*\n';
+              let orderTotal = 0;
+
+              for (const item of currentCart) {
+                const subtotal = item.quantity * item.unitPrice;
+                orderTotal += subtotal;
+                orderSummary += `• ${item.quantity}x ${item.productName} = R$ ${subtotal.toFixed(2)}\n`;
+              }
+
+              orderSummary += `\n💰 *TOTAL: R$ ${orderTotal.toFixed(2)}*`;
+              
+              if (customerNotes) {
+                orderSummary += `\n\n📝 *Observações:* ${customerNotes}`;
+              }
+
+              orderSummary += `\n\n🎉 Obrigado pelo pedido! Em breve você receberá mais informações.`;
+
+              toolSuggestedMessage = orderSummary;
+
+              // Clear cart after confirmation
+              await clearContactCart(phoneNumber);
+
+              await createLog(
+                agent.id,
+                'tool_call',
+                `Tool: confirm_order - Total R$ ${orderTotal.toFixed(2)}`,
+                { cartItems: currentCart, total: orderTotal, notes: customerNotes },
+                phoneNumber,
+                'whatsapp'
+              );
+            }
+          } catch (e) {
+            console.error('Error parsing confirm_order tool call:', e);
+            await createLog(agent.id, 'error', 'Erro ao processar confirm_order', { error: String(e) }, phoneNumber, 'whatsapp');
+          }
+        }
       }
 
 
@@ -1040,6 +1446,12 @@ Inclua também a mensagem atual do cliente no conversation_history.
       availableTools.push(...mediaTools);
     }
     if (productItems.length > 0) {
+      // Add cart tools
+      availableTools.push(addToCartTool);
+      availableTools.push(removeFromCartTool);
+      availableTools.push(viewCartTool);
+      availableTools.push(clearCartTool);
+      availableTools.push(confirmOrderTool);
       availableTools.push(calculateOrderTool);
       // Add send_product_image tool if any product has an image
       const hasProductImages = productItems.some(p => p.image_url);
@@ -1203,6 +1615,62 @@ Inclua também a mensagem atual do cliente no conversation_history.
           } catch (e) {
             console.error('Error parsing notify_human tool call:', e);
             textResponse = '🔔 Transferência para atendente humano solicitada.';
+          }
+        }
+
+        // Cart tools for testing (simplified - no persistence in test mode)
+        if (toolCall.function.name === 'add_to_cart') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const productName: string = args.product_name || '';
+            const quantity: number = args.quantity || 1;
+
+            const product = productItems.find(
+              p => p.name.toLowerCase().includes(productName.toLowerCase()) ||
+                   productName.toLowerCase().includes(p.name.toLowerCase())
+            );
+
+            if (product) {
+              const unitPrice = typeof product.price === 'number' ? product.price : parseFloat(String(product.price));
+              const safeUnitPrice = Number.isFinite(unitPrice) ? unitPrice : 0;
+              textResponse = `✅ Adicionado: ${quantity}x ${product.name} (R$ ${safeUnitPrice.toFixed(2)} cada)\n\n🛒 [Carrinho atualizado no modo teste]\n\nDeseja mais alguma coisa?`;
+            } else {
+              textResponse = `Desculpe, não encontrei "${productName}" no catálogo.`;
+            }
+          } catch (e) {
+            console.error('Error parsing add_to_cart tool call (test):', e);
+          }
+        }
+
+        if (toolCall.function.name === 'remove_from_cart') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            textResponse = `✅ ${args.product_name} removido do carrinho\n\n🛒 [Carrinho atualizado no modo teste]`;
+          } catch (e) {
+            console.error('Error parsing remove_from_cart tool call (test):', e);
+          }
+        }
+
+        if (toolCall.function.name === 'view_cart') {
+          textResponse = '🛒 [Visualização do carrinho no modo teste - o carrinho real funciona apenas no WhatsApp]';
+        }
+
+        if (toolCall.function.name === 'clear_cart') {
+          textResponse = '🗑️ Carrinho limpo!\n\nPodemos começar um novo pedido quando quiser.';
+        }
+
+        if (toolCall.function.name === 'confirm_order') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            let orderText = '✅ *PEDIDO CONFIRMADO!*\n\n';
+            orderText += '[No modo teste, o pedido seria finalizado e o carrinho limpo]\n';
+            if (args.customer_notes) {
+              orderText += `\n📝 *Observações:* ${args.customer_notes}`;
+            }
+            orderText += '\n\n🎉 Obrigado pelo pedido!';
+            textResponse = orderText;
+          } catch (e) {
+            console.error('Error parsing confirm_order tool call (test):', e);
           }
         }
       }
