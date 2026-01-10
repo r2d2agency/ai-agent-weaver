@@ -46,10 +46,37 @@ interface WebhookPayload {
   };
 }
 
+// In-memory deduplication cache (messageId -> timestamp)
+const processedMessages = new Map<string, number>();
+const DEDUP_TTL_MS = 60000; // 60 seconds
+
+// Clean old entries periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, ts] of processedMessages.entries()) {
+    if (now - ts > DEDUP_TTL_MS) {
+      processedMessages.delete(id);
+    }
+  }
+}, 30000);
+
 webhookRouter.post('/:instanceName', async (req, res) => {
   try {
     const { instanceName } = req.params;
     const payload: WebhookPayload = req.body;
+
+    const messageId = payload.data?.key?.id;
+
+    // Deduplicate: skip if we already processed this messageId recently
+    if (messageId && processedMessages.has(messageId)) {
+      console.log(`Duplicate webhook ignored for messageId: ${messageId}`);
+      return res.status(200).json({ status: 'ignored', reason: 'duplicate' });
+    }
+
+    // Mark as processed
+    if (messageId) {
+      processedMessages.set(messageId, Date.now());
+    }
 
     const isFromMe = payload.data?.key?.fromMe === true;
 
