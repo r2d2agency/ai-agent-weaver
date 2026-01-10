@@ -149,6 +149,12 @@ export const testOpenAIConnection = (key: string) =>
     body: JSON.stringify({ key }),
   });
 
+export const previewVoice = (voice: string, agentId?: string) =>
+  apiRequest<{ success: boolean; audio: string; mimeType: string }>('/api/settings/preview-voice', {
+    method: 'POST',
+    body: JSON.stringify({ voice, agentId }),
+  });
+
 // FAQs
 export const getFaqs = (agentId: string) => 
   apiRequest<any[]>(`/api/faq/${agentId}`);
