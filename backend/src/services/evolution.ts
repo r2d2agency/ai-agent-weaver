@@ -68,6 +68,64 @@ export async function sendMessage(instanceName: string, phoneNumber: string, mes
   }
 }
 
+// Send multiple text messages with delay between them (for natural conversation)
+export async function sendMessagesWithDelay(
+  instanceName: string, 
+  phoneNumber: string, 
+  messages: string[], 
+  agent?: any,
+  delayMs: number = 1500
+) {
+  const results = [];
+  for (let i = 0; i < messages.length; i++) {
+    if (i > 0) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+    const result = await sendMessage(instanceName, phoneNumber, messages[i], agent);
+    results.push(result);
+  }
+  return results;
+}
+
+// Send media (image/video) via Evolution API
+export async function sendMedia(
+  instanceName: string, 
+  phoneNumber: string, 
+  mediaBase64: string,
+  mimeType: string,
+  caption?: string,
+  agent?: any
+) {
+  try {
+    const { apiUrl, apiKey } = agent 
+      ? await getAgentEvolutionCredentials(agent)
+      : await getEvolutionCredentials();
+    
+    const isVideo = mimeType.includes('video');
+    const endpoint = isVideo ? 'sendVideo' : 'sendImage';
+    
+    const response = await axios.post(
+      `${apiUrl}/message/${endpoint}/${instanceName}`,
+      {
+        number: phoneNumber,
+        [isVideo ? 'video' : 'image']: `data:${mimeType};base64,${mediaBase64}`,
+        caption: caption || ''
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': apiKey,
+        },
+      }
+    );
+
+    return response.data;
+  } catch (error) {
+    console.error('Evolution API send media error:', error);
+    throw error;
+  }
+}
+
 export async function downloadMediaForAgent(instanceName: string, messageId: string, agent: any): Promise<string | null> {
   try {
     const { apiUrl, apiKey } = await getAgentEvolutionCredentials(agent);
