@@ -36,6 +36,13 @@ export async function initDatabase() {
         out_of_hours_message TEXT DEFAULT 'Olá! Nosso horário de atendimento é das 09:00 às 18:00. Deixe sua mensagem que responderemos assim que possível! 🕐',
         evolution_api_url VARCHAR(500),
         evolution_api_key VARCHAR(255),
+        widget_avatar_url TEXT,
+        widget_position VARCHAR(10) DEFAULT 'right',
+        widget_title VARCHAR(255) DEFAULT 'Assistente',
+        widget_primary_color VARCHAR(20) DEFAULT '#667eea',
+        widget_secondary_color VARCHAR(20) DEFAULT '#764ba2',
+        widget_background_color VARCHAR(20) DEFAULT '#ffffff',
+        widget_text_color VARCHAR(20) DEFAULT '#333333',
         openai_api_key VARCHAR(255),
         openai_model VARCHAR(100) DEFAULT 'gpt-4o',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -188,6 +195,27 @@ export async function initDatabase() {
         END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='evolution_api_key') THEN
           ALTER TABLE agents ADD COLUMN evolution_api_key VARCHAR(255);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='widget_avatar_url') THEN
+          ALTER TABLE agents ADD COLUMN widget_avatar_url TEXT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='widget_position') THEN
+          ALTER TABLE agents ADD COLUMN widget_position VARCHAR(10) DEFAULT 'right';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='widget_title') THEN
+          ALTER TABLE agents ADD COLUMN widget_title VARCHAR(255) DEFAULT 'Assistente';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='widget_primary_color') THEN
+          ALTER TABLE agents ADD COLUMN widget_primary_color VARCHAR(20) DEFAULT '#667eea';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='widget_secondary_color') THEN
+          ALTER TABLE agents ADD COLUMN widget_secondary_color VARCHAR(20) DEFAULT '#764ba2';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='widget_background_color') THEN
+          ALTER TABLE agents ADD COLUMN widget_background_color VARCHAR(20) DEFAULT '#ffffff';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='widget_text_color') THEN
+          ALTER TABLE agents ADD COLUMN widget_text_color VARCHAR(20) DEFAULT '#333333';
         END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='is_audio') THEN
           ALTER TABLE messages ADD COLUMN is_audio BOOLEAN DEFAULT false;
