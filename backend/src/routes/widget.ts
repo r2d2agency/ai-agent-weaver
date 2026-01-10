@@ -394,6 +394,40 @@ widgetRouter.get('/embed/:agentId', async (req, res) => {
       }
       .wa-widget-input button:disabled { opacity: 0.5; cursor: not-allowed; }
       .wa-widget-input button svg { width: 20px; height: 20px; fill: white; }
+      
+      .wa-widget-reset {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 8px 12px;
+        margin: 8px 12px;
+        background: #ff5252;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 12px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .wa-widget-reset:hover { background: #ff1744; }
+      .wa-widget-reset svg { width: 14px; height: 14px; fill: white; }
+      
+      .wa-widget-footer {
+        display: flex;
+        flex-direction: column;
+        border-top: 1px solid #eee;
+        background: \${config.backgroundColor};
+      }
+      
+      .wa-widget-training-badge {
+        background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+        color: white;
+        text-align: center;
+        padding: 6px;
+        font-size: 11px;
+        font-weight: 600;
+      }
     \`;
     document.head.appendChild(styles);
   }
@@ -422,11 +456,18 @@ widgetRouter.get('/embed/:agentId', async (req, res) => {
         <div class="wa-widget-messages" id="wa-widget-messages">
           <div class="wa-widget-message agent">Olá! Como posso ajudar você?</div>
         </div>
-        <div class="wa-widget-input">
-          <input type="text" id="wa-widget-input" placeholder="Digite sua mensagem..." />
-          <button id="wa-widget-send">
-            <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        <div class="wa-widget-footer">
+          <div class="wa-widget-training-badge">🧪 Versão de Treinamento</div>
+          <button class="wa-widget-reset" id="wa-widget-reset">
+            <svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+            Limpar Conversa e Resetar
           </button>
+          <div class="wa-widget-input">
+            <input type="text" id="wa-widget-input" placeholder="Digite sua mensagem..." />
+            <button id="wa-widget-send">
+              <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            </button>
+          </div>
         </div>
       </div>
     \`;
@@ -444,6 +485,7 @@ widgetRouter.get('/embed/:agentId', async (req, res) => {
     var messages = document.getElementById('wa-widget-messages');
     var input = document.getElementById('wa-widget-input');
     var sendBtn = document.getElementById('wa-widget-send');
+    var resetBtn = document.getElementById('wa-widget-reset');
     
     toggle.onclick = function() {
       widget.classList.toggle('open');
@@ -454,6 +496,22 @@ widgetRouter.get('/embed/:agentId', async (req, res) => {
     
     closeBtn.onclick = function() {
       widget.classList.remove('open');
+    };
+    
+    function resetConversation() {
+      // Clear all messages and reset state
+      sessionId = null;
+      history = [];
+      messages.innerHTML = '<div class="wa-widget-message agent">Olá! Como posso ajudar você?</div>';
+      input.value = '';
+      isLoading = false;
+      sendBtn.disabled = false;
+    }
+    
+    resetBtn.onclick = function() {
+      if (confirm('Tem certeza que deseja limpar a conversa e resetar o treinamento?')) {
+        resetConversation();
+      }
     };
     
     function addMessage(text, sender) {
