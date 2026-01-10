@@ -24,10 +24,7 @@ import {
 } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { getAgents } from '@/lib/api';
-
-const API_BASE_URL = 'http://whats-agente-backend.isyhhh.easypanel.host:3000';
-
+import { API_BASE_URL, getAgents } from '@/lib/api';
 interface UserData {
   id: string;
   email: string;

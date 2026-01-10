@@ -1,6 +1,25 @@
 // Backend API configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://whats-agente-backend.isyhhh.easypanel.host';
+const RAW_API_BASE_URL = import.meta.env.VITE_API_URL || 'https://whats-agente-backend.isyhhh.easypanel.host';
 
+const normalizeApiBaseUrl = (url: string) => {
+  let base = url.trim().replace(/\/+$/, '');
+
+  const isHttpsPage = typeof window !== 'undefined' && window.location.protocol === 'https:';
+
+  // Avoid Mixed Content: upgrade to https when the app is running on https
+  if (isHttpsPage && base.startsWith('http://')) {
+    base = `https://${base.slice('http://'.length)}`;
+  }
+
+  // If we ended up with https, drop :3000 (usually not exposed via TLS behind proxies)
+  if (base.startsWith('https://')) {
+    base = base.replace(/:3000$/, '');
+  }
+
+  return base;
+};
+
+export const API_BASE_URL = normalizeApiBaseUrl(RAW_API_BASE_URL);
 async function apiRequest<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,

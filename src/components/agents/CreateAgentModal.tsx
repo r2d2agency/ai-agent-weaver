@@ -13,9 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-
-const BACKEND_URL = 'http://whats-agente-backend.isyhhh.easypanel.host:3000';
-
+import { API_BASE_URL } from '@/lib/api';
 interface CreateAgentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -49,7 +47,7 @@ export function CreateAgentModal({ open, onOpenChange, onSubmit, isLoading }: Cr
 
   // Auto-generate webhook URL based on instance name
   const generatedWebhookUrl = formData.instanceName 
-    ? `${BACKEND_URL}/webhook/${formData.instanceName}`
+    ? `${API_BASE_URL}/webhook/${formData.instanceName}`
     : '';
 
   const handleDrag = (e: React.DragEvent) => {
