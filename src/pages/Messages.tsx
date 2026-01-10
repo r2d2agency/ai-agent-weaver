@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { MessageSquare, Search, Filter } from 'lucide-react';
+import { MessageSquare, Search, Filter, Loader2 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Input } from '@/components/ui/input';
@@ -13,74 +13,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Message } from '@/types/agent';
-
-const mockMessages: (Message & { agentName: string })[] = [
-  {
-    id: '1',
-    agentId: '1',
-    agentName: 'Atendente Virtual',
-    sender: 'user',
-    content: 'Olá, gostaria de saber sobre os produtos disponíveis',
-    phoneNumber: '+55 11 99999-1234',
-    timestamp: new Date(Date.now() - 1000 * 60 * 2),
-    status: 'read',
-  },
-  {
-    id: '2',
-    agentId: '1',
-    agentName: 'Atendente Virtual',
-    sender: 'agent',
-    content: 'Olá! Claro, posso ajudá-lo. Temos várias categorias de produtos. Qual área você tem interesse?',
-    phoneNumber: '+55 11 99999-1234',
-    timestamp: new Date(Date.now() - 1000 * 60 * 1),
-    status: 'delivered',
-  },
-  {
-    id: '3',
-    agentId: '2',
-    agentName: 'Suporte Técnico',
-    sender: 'user',
-    content: 'Estou com problema no login do sistema',
-    phoneNumber: '+55 21 98888-5678',
-    timestamp: new Date(Date.now() - 1000 * 60 * 5),
-    status: 'read',
-  },
-  {
-    id: '4',
-    agentId: '2',
-    agentName: 'Suporte Técnico',
-    sender: 'agent',
-    content: 'Entendo. Vou te ajudar a resolver isso. Primeiro, pode me informar qual mensagem de erro aparece?',
-    phoneNumber: '+55 21 98888-5678',
-    timestamp: new Date(Date.now() - 1000 * 60 * 4),
-    status: 'delivered',
-  },
-  {
-    id: '5',
-    agentId: '1',
-    agentName: 'Atendente Virtual',
-    sender: 'user',
-    content: 'Quero ver os preços de eletrônicos',
-    phoneNumber: '+55 31 97777-9012',
-    timestamp: new Date(Date.now() - 1000 * 60 * 10),
-    status: 'read',
-  },
-];
+import { useQuery } from '@tanstack/react-query';
+import { getMessages } from '@/lib/api';
+import { useAgents } from '@/hooks/use-agents';
 
 const MessagesPage = () => {
-  const [messages] = useState(mockMessages);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAgent, setSelectedAgent] = useState<string>('all');
 
-  const filteredMessages = messages.filter(msg => {
-    const matchesSearch = msg.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      msg.phoneNumber.includes(searchTerm);
-    const matchesAgent = selectedAgent === 'all' || msg.agentId === selectedAgent;
+  const { data: messagesData, isLoading: messagesLoading } = useQuery({
+    queryKey: ['messages'],
+    queryFn: () => getMessages(),
+  });
+
+  const { data: agentsData } = useAgents();
+
+  const messages = messagesData || [];
+  const agents = agentsData || [];
+
+  const filteredMessages = messages.filter((msg: any) => {
+    const matchesSearch = 
+      msg.content?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      msg.phone_number?.includes(searchTerm);
+    const matchesAgent = selectedAgent === 'all' || msg.agent_id === selectedAgent;
     return matchesSearch && matchesAgent;
   });
 
-  const formatTime = (date: Date) => {
+  const formatTime = (dateStr: string) => {
+    const date = new Date(dateStr);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const minutes = Math.floor(diff / 1000 / 60);
@@ -90,6 +50,25 @@ const MessagesPage = () => {
     if (minutes < 1440) return `há ${Math.floor(minutes / 60)}h`;
     return date.toLocaleDateString('pt-BR');
   };
+
+  const getAgentName = (agentId: string) => {
+    const agent = agents.find((a: any) => a.id === agentId);
+    return agent?.name || 'Agente Desconhecido';
+  };
+
+  if (messagesLoading) {
+    return (
+      <MainLayout>
+        <Header 
+          title="Mensagens" 
+          subtitle="Histórico de conversas dos seus agentes"
+        />
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
@@ -115,9 +94,11 @@ const MessagesPage = () => {
           </SelectTrigger>
           <SelectContent className="bg-card border-border">
             <SelectItem value="all">Todos os agentes</SelectItem>
-            <SelectItem value="1">Atendente Virtual</SelectItem>
-            <SelectItem value="2">Suporte Técnico</SelectItem>
-            <SelectItem value="3">Vendas</SelectItem>
+            {agents.map((agent: any) => (
+              <SelectItem key={agent.id} value={agent.id}>
+                {agent.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
 
@@ -133,7 +114,7 @@ const MessagesPage = () => {
             <p className="text-muted-foreground">Nenhuma mensagem encontrada</p>
           </div>
         ) : (
-          filteredMessages.map((message, index) => (
+          filteredMessages.map((message: any, index: number) => (
             <motion.div
               key={message.id}
               initial={{ opacity: 0, x: -20 }}
@@ -153,7 +134,7 @@ const MessagesPage = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-medium text-foreground">
-                        {message.sender === 'user' ? message.phoneNumber : message.agentName}
+                        {message.sender === 'user' ? message.phone_number : getAgentName(message.agent_id)}
                       </span>
                       <Badge variant="outline" className="text-xs">
                         {message.sender === 'user' ? 'Usuário' : 'Agente'}
@@ -164,26 +145,22 @@ const MessagesPage = () => {
                     </p>
                     <div className="flex items-center gap-2 mt-2">
                       <span className="text-xs text-muted-foreground">
-                        via {message.agentName}
+                        via {getAgentName(message.agent_id)}
                       </span>
                     </div>
                   </div>
                 </div>
                 <div className="text-right shrink-0">
                   <span className="text-xs text-muted-foreground">
-                    {formatTime(message.timestamp)}
+                    {formatTime(message.created_at)}
                   </span>
                   <Badge 
                     variant="outline" 
                     className={`block mt-2 text-xs ${
-                      message.status === 'read' ? 'text-success border-success' :
-                      message.status === 'delivered' ? 'text-info border-info' :
-                      'text-muted-foreground'
+                      message.sender === 'agent' ? 'text-success border-success' : 'text-info border-info'
                     }`}
                   >
-                    {message.status === 'read' ? 'Lida' :
-                     message.status === 'delivered' ? 'Entregue' :
-                     message.status === 'sent' ? 'Enviada' : 'Erro'}
+                    {message.sender === 'agent' ? 'Respondida' : 'Recebida'}
                   </Badge>
                 </div>
               </div>
