@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, Images, File, Key, Link2, Upload, Palette, Video, HelpCircle, Volume2, Play, Square, Bell, Phone, ClipboardList } from 'lucide-react';
+import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, Images, File, Key, Link2, Upload, Palette, Video, HelpCircle, Volume2, Play, Square, Bell, Phone, ClipboardList, Package } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import { AgentDocumentsModal } from '@/components/agents/AgentDocumentsModal';
 import { AgentMediaModal } from '@/components/agents/AgentMediaModal';
 import { AgentConversationsModal } from '@/components/agents/AgentConversationsModal';
 import { AgentFaqModal } from '@/components/agents/AgentFaqModal';
+import { AgentProductsModal } from '@/components/agents/AgentProductsModal';
 import { RequiredFieldsManager, RequiredField } from '@/components/agents/RequiredFieldsManager';
 
 const AgentDetailsPage = () => {
@@ -75,6 +76,7 @@ const AgentDetailsPage = () => {
   const [mediaModalOpen, setMediaModalOpen] = useState(false);
   const [conversationsModalOpen, setConversationsModalOpen] = useState(false);
   const [faqModalOpen, setFaqModalOpen] = useState(false);
+  const [productsModalOpen, setProductsModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [webhookCopied, setWebhookCopied] = useState(false);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
@@ -804,6 +806,30 @@ const AgentDetailsPage = () => {
             >
               <HelpCircle className="w-4 h-4 mr-2" />
               Gerenciar FAQs
+            </Button>
+          </motion.div>
+
+          {/* Products Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.165 }}
+            className="glass-card p-6"
+          >
+            <h3 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+              <Package className="w-4 h-4 text-primary" />
+              Catálogo de Produtos
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Produtos com preços para a IA consultar e calcular pedidos.
+            </p>
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={() => setProductsModalOpen(true)}
+            >
+              <Package className="w-4 h-4 mr-2" />
+              Gerenciar Produtos
             </Button>
           </motion.div>
 
@@ -1676,6 +1702,13 @@ const AgentDetailsPage = () => {
         open={faqModalOpen}
         onOpenChange={setFaqModalOpen}
         agent={agentData ? { id: agentData.id, name: agentData.name } : null}
+      />
+
+      <AgentProductsModal
+        open={productsModalOpen}
+        onOpenChange={setProductsModalOpen}
+        agentId={agentData?.id || ''}
+        agentName={agentData?.name || ''}
       />
     </MainLayout>
   );
