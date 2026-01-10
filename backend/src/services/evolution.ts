@@ -102,26 +102,32 @@ export async function sendMedia(
       : await getEvolutionCredentials();
     
     const isVideo = mimeType.includes('video');
-    const endpoint = isVideo ? 'sendVideo' : 'sendImage';
     
+    console.log(`Sending media via Evolution API: ${apiUrl}, instance: ${instanceName}, isVideo: ${isVideo}`);
+    
+    // Evolution API v2 uses sendMedia endpoint for both images and videos
     const response = await axios.post(
-      `${apiUrl}/message/${endpoint}/${instanceName}`,
+      `${apiUrl}/message/sendMedia/${instanceName}`,
       {
         number: phoneNumber,
-        [isVideo ? 'video' : 'image']: `data:${mimeType};base64,${mediaBase64}`,
-        caption: caption || ''
+        mediatype: isVideo ? 'video' : 'image',
+        media: `data:${mimeType};base64,${mediaBase64}`,
+        caption: caption || '',
+        fileName: isVideo ? 'video.mp4' : 'image.jpg'
       },
       {
         headers: {
           'Content-Type': 'application/json',
           'apikey': apiKey,
         },
+        timeout: 60000, // 60 second timeout for large files
       }
     );
 
+    console.log(`Media sent successfully via Evolution API`);
     return response.data;
-  } catch (error) {
-    console.error('Evolution API send media error:', error);
+  } catch (error: any) {
+    console.error('Evolution API send media error:', error.response?.data || error.message);
     throw error;
   }
 }

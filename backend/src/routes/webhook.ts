@@ -270,26 +270,47 @@ async function processAndRespond(
 
     // Send media items if any
     if (mediaToSend && mediaToSend.length > 0) {
+      console.log(`Sending ${mediaToSend.length} media items to ${phoneNumber}`);
+      
       for (const media of mediaToSend) {
         try {
+          console.log(`Processing media: ${media.name}, type: ${media.type}, urls count: ${media.file_urls?.length || 0}`);
+          
           // Small delay between media
           await new Promise(resolve => setTimeout(resolve, 800));
           
+          if (!media.file_urls || media.file_urls.length === 0) {
+            console.error(`No file URLs for media: ${media.name}`);
+            continue;
+          }
+          
           for (let i = 0; i < media.file_urls.length; i++) {
             const fileUrl = media.file_urls[i];
-            const mimeType = media.mime_types[i] || 'image/jpeg';
+            const mimeType = media.mime_types?.[i] || 'image/jpeg';
+            
+            console.log(`Sending file ${i + 1}/${media.file_urls.length}, mimeType: ${mimeType}, url length: ${fileUrl?.length || 0}`);
+            
+            if (!fileUrl) {
+              console.error(`Empty file URL at index ${i}`);
+              continue;
+            }
             
             // Extract base64 from data URL
             const base64Match = fileUrl.match(/^data:[^;]+;base64,(.+)$/);
             if (base64Match) {
               const base64 = base64Match[1];
               const caption = i === 0 ? media.name : undefined;
+              
+              console.log(`Sending base64 media, length: ${base64.length}, caption: ${caption}`);
               await sendMedia(instanceName, phoneNumber, base64, mimeType, caption, agent);
+              console.log(`Media sent successfully: ${media.name}`);
               
               // Small delay between gallery items
               if (i < media.file_urls.length - 1) {
                 await new Promise(resolve => setTimeout(resolve, 500));
               }
+            } else {
+              console.error(`File URL is not a valid data URL: ${fileUrl.substring(0, 50)}...`);
             }
           }
         } catch (mediaError) {
