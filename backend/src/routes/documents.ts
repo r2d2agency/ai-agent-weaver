@@ -4,6 +4,22 @@ import { v4 as uuidv4 } from 'uuid';
 
 export const documentsRouter = Router();
 
+// Parse PDF and extract text
+async function extractTextFromPDF(base64Data: string): Promise<string> {
+  try {
+    // Dynamic import for pdf-parse (CommonJS module)
+    const pdfParse = (await import('pdf-parse')).default;
+    
+    const buffer = Buffer.from(base64Data, 'base64');
+    const data = await pdfParse(buffer);
+    
+    return data.text || '';
+  } catch (error) {
+    console.error('Error parsing PDF:', error);
+    throw new Error('Failed to parse PDF');
+  }
+}
+
 // Get documents for an agent
 documentsRouter.get('/agent/:agentId', async (req, res) => {
   try {
@@ -62,6 +78,46 @@ documentsRouter.post('/agent/:agentId', async (req, res) => {
   }
 });
 
+// Upload PDF and extract text for RAG training
+documentsRouter.post('/agent/:agentId/pdf', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    const { name, base64Data } = req.body;
+    
+    if (!name || !base64Data) {
+      return res.status(400).json({ error: 'Name and base64Data are required' });
+    }
+    
+    console.log(`Processing PDF "${name}" for agent ${agentId}...`);
+    
+    // Extract text from PDF
+    const extractedText = await extractTextFromPDF(base64Data);
+    
+    if (!extractedText.trim()) {
+      return res.status(400).json({ error: 'Could not extract text from PDF. The file may be empty or image-only.' });
+    }
+    
+    console.log(`Extracted ${extractedText.length} characters from PDF`);
+    
+    // Save extracted text as document
+    const result = await query(
+      `INSERT INTO documents (agent_id, name, type, size, content) 
+       VALUES ($1, $2, $3, $4, $5) 
+       RETURNING *`,
+      [agentId, name, 'application/pdf', extractedText.length, extractedText]
+    );
+    
+    res.status(201).json({
+      ...result.rows[0],
+      extractedCharacters: extractedText.length,
+      message: `PDF processado com sucesso! ${extractedText.length} caracteres extraídos.`
+    });
+  } catch (error) {
+    console.error('Error processing PDF:', error);
+    res.status(500).json({ error: 'Failed to process PDF: ' + (error instanceof Error ? error.message : 'Unknown error') });
+  }
+});
+
 // Delete document
 documentsRouter.delete('/:id', async (req, res) => {
   try {
@@ -92,8 +148,7 @@ documentsRouter.put('/:id', async (req, res) => {
     const result = await query(
       `UPDATE documents 
        SET name = COALESCE($1, name), 
-           content = COALESCE($2, content),
-           updated_at = CURRENT_TIMESTAMP
+           content = COALESCE($2, content)
        WHERE id = $3 
        RETURNING *`,
       [name, content, id]
