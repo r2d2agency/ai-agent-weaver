@@ -170,3 +170,18 @@ export const deleteFaq = (agentId: string, faqId: string) =>
   apiRequest<{ success: boolean }>(`/api/faq/${agentId}/${faqId}`, {
     method: 'DELETE',
   });
+
+// Logs
+export const getLogs = (agentId?: string, logType?: string, limit: number = 100) => {
+  const params = new URLSearchParams();
+  if (agentId) params.append('agent_id', agentId);
+  if (logType) params.append('log_type', logType);
+  params.append('limit', limit.toString());
+  return apiRequest<any[]>(`/api/logs?${params.toString()}`);
+};
+
+export const getLogStats = (agentId?: string) => {
+  const params = new URLSearchParams();
+  if (agentId) params.append('agent_id', agentId);
+  return apiRequest<{ total: number; byType: any[]; recent: any[] }>(`/api/logs/stats?${params.toString()}`);
+};

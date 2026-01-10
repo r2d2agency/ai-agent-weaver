@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { query } from './database.js';
+import { createLog } from '../routes/logs.js';
 
 let globalOpenaiClient: OpenAI | null = null;
 
@@ -236,6 +237,21 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
     console.log('Tool calls count:', message?.tool_calls?.length || 0);
     console.log('Text content:', message?.content?.substring(0, 200));
     
+    // Log the AI response info
+    await createLog(
+      agent.id,
+      'info',
+      'OpenAI Response Received',
+      {
+        model,
+        hasToolCalls: !!message?.tool_calls,
+        toolCallsCount: message?.tool_calls?.length || 0,
+        textPreview: message?.content?.substring(0, 100) || '',
+      },
+      phoneNumber,
+      'whatsapp'
+    );
+    
     if (message?.tool_calls && message.tool_calls.length > 0) {
       console.log('=== Tool Calls Details ===');
       let toolSuggestedMessage: string | null = null;
@@ -259,6 +275,20 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
             console.log(`Tool call send_media with names: ${mediaNames.join(', ')}`);
             console.log('Available media items:', mediaItems.map(m => m.name).join(', '));
 
+            // Log the tool call
+            await createLog(
+              agent.id,
+              'tool_call',
+              `Tool: send_media - Buscando "${mediaNames.join(', ')}"`,
+              {
+                requestedMedia: mediaNames,
+                availableMedia: mediaItems.map(m => m.name),
+                message: additionalMessage,
+              },
+              phoneNumber,
+              'whatsapp'
+            );
+
             // Find matching media items (more flexible matching)
             for (const name of mediaNames) {
               const found = mediaItems.find(
@@ -269,12 +299,41 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
               if (found) {
                 mediaToSend.push(found);
                 console.log(`✓ Found media match: "${name}" -> "${found.name}"`);
+                
+                // Log successful match
+                await createLog(
+                  agent.id,
+                  'media_match',
+                  `Mídia encontrada: "${found.name}"`,
+                  {
+                    requested: name,
+                    matched: found.name,
+                    type: found.type,
+                    filesCount: found.file_urls?.length || 0,
+                  },
+                  phoneNumber,
+                  'whatsapp'
+                );
               } else {
                 console.log(`✗ Media not found: "${name}"`);
+                
+                // Log failed match
+                await createLog(
+                  agent.id,
+                  'error',
+                  `Mídia não encontrada: "${name}"`,
+                  {
+                    requested: name,
+                    availableMedia: mediaItems.map(m => m.name),
+                  },
+                  phoneNumber,
+                  'whatsapp'
+                );
               }
             }
           } catch (e) {
             console.error('Error parsing tool call:', e);
+            await createLog(agent.id, 'error', 'Erro ao processar tool call', { error: String(e) }, phoneNumber, 'whatsapp');
           }
         }
       }
@@ -283,6 +342,19 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
       if (mediaToSend.length > 0) {
         console.log(`=== Sending ${mediaToSend.length} media items ===`);
         textResponse = toolSuggestedMessage || 'Perfeito — vou te enviar agora.';
+        
+        // Log media send
+        await createLog(
+          agent.id,
+          'media_send',
+          `Enviando ${mediaToSend.length} mídia(s)`,
+          {
+            mediaNames: mediaToSend.map(m => m.name),
+            mediaTypes: mediaToSend.map(m => m.type),
+          },
+          phoneNumber,
+          'whatsapp'
+        );
       } else {
         console.log('=== No media matched, sending fallback message ===');
         textResponse =

@@ -11,6 +11,7 @@ import { documentsRouter } from './routes/documents.js';
 import { conversationsRouter } from './routes/conversations.js';
 import { mediaRouter } from './routes/media.js';
 import { faqRouter } from './routes/faq.js';
+import { logsRouter } from './routes/logs.js';
 import { initDatabase } from './services/database.js';
 import { startInactivityChecker } from './services/inactivity.js';
 
@@ -39,6 +40,7 @@ app.use('/api/documents', documentsRouter);
 app.use('/api/conversations', conversationsRouter);
 app.use('/api/media', mediaRouter);
 app.use('/api/faq', faqRouter);
+app.use('/api/logs', logsRouter);
 
 // Initialize database and start server
 async function start() {

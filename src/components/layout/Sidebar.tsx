@@ -8,7 +8,8 @@ import {
   Webhook,
   FileText,
   Users,
-  LogOut
+  LogOut,
+  ScrollText
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBranding } from '@/contexts/BrandingContext';
@@ -23,6 +24,7 @@ export function Sidebar() {
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
     { icon: Bot, label: 'Agentes', path: '/agents' },
     { icon: MessageSquare, label: 'Mensagens', path: '/messages' },
+    { icon: ScrollText, label: 'Logs', path: '/logs' },
     { icon: Webhook, label: 'Webhooks', path: '/webhooks' },
     { icon: FileText, label: 'Documentos', path: '/documents' },
     { icon: Settings, label: 'Configurações', path: '/settings' },
