@@ -1148,22 +1148,44 @@ const AgentDetailsPage = () => {
                 </Button>
 
                 {/* Embed Code */}
-                <div className="space-y-2 pt-4 border-t border-border">
-                  <Label className="text-xs">Código de Incorporação</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      readOnly
-                      value={`<script src="${API_BASE_URL}/api/widget/embed/${id}"></script>`}
-                      className="bg-muted border-border text-xs font-mono"
-                    />
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={copyEmbedCode}
-                    >
-                      {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-                    </Button>
+                <div className="space-y-3 pt-4 border-t border-border">
+                  <Label className="text-xs font-semibold">Código de Incorporação</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Cole este código antes do fechamento da tag &lt;/body&gt; do seu site.
+                  </p>
+                  
+                  {/* Basic embed */}
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-muted-foreground">Básico</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        readOnly
+                        value={`<script src="${API_BASE_URL}/api/widget/embed/${id}"></script>`}
+                        className="bg-muted border-border text-xs font-mono"
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={copyEmbedCode}
+                      >
+                        {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+                      </Button>
+                    </div>
                   </div>
+
+                  {/* Custom dimensions embed */}
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-muted-foreground">Com dimensões personalizadas</Label>
+                    <div className="p-2 bg-muted rounded-md">
+                      <code className="text-[10px] font-mono text-muted-foreground break-all">
+                        {`<script src="${API_BASE_URL}/api/widget/embed/${id}" data-width="420" data-height="600"></script>`}
+                      </code>
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-muted-foreground">
+                    Use <code className="bg-muted px-1 rounded">data-width</code> e <code className="bg-muted px-1 rounded">data-height</code> para ajustar o tamanho.
+                  </p>
                 </div>
               </div>
             )}
