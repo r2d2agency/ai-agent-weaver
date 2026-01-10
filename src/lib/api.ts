@@ -90,6 +90,8 @@ export const updateAgent = (id: string, data: Partial<{
   widgetSecondaryColor: string;
   widgetBackgroundColor: string;
   widgetTextColor: string;
+  audioResponseEnabled: boolean;
+  audioResponseVoice: string;
 }>) => apiRequest<any>(`/api/agents/${id}`, {
   method: 'PUT',
   body: JSON.stringify(data),

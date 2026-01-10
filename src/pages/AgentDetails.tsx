@@ -915,31 +915,36 @@ const AgentDetailsPage = () => {
             </p>
             {formData.audioResponseEnabled && (
               <div className="space-y-3">
-                <Label className="text-xs">Tipo de Voz</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => handleAudioResponseVoiceChange('nova')}
-                    className={`p-3 rounded-lg border text-sm font-medium transition-colors ${
-                      formData.audioResponseVoice === 'nova' 
-                        ? 'border-primary bg-primary/10 text-primary' 
-                        : 'border-border bg-muted hover:border-primary/50'
-                    }`}
-                  >
-                    👩 Feminina (Nova)
-                  </button>
-                  <button
-                    onClick={() => handleAudioResponseVoiceChange('onyx')}
-                    className={`p-3 rounded-lg border text-sm font-medium transition-colors ${
-                      formData.audioResponseVoice === 'onyx' 
-                        ? 'border-primary bg-primary/10 text-primary' 
-                        : 'border-border bg-muted hover:border-primary/50'
-                    }`}
-                  >
-                    👨 Masculina (Onyx)
-                  </button>
+                <Label className="text-xs">Selecione a Voz</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'nova', label: 'Nova', emoji: '👩', desc: 'Feminina suave' },
+                    { id: 'shimmer', label: 'Shimmer', emoji: '👩‍💼', desc: 'Feminina expressiva' },
+                    { id: 'alloy', label: 'Alloy', emoji: '🧑', desc: 'Neutra' },
+                    { id: 'onyx', label: 'Onyx', emoji: '👨', desc: 'Masculina grave' },
+                    { id: 'echo', label: 'Echo', emoji: '👨‍💼', desc: 'Masculina média' },
+                    { id: 'fable', label: 'Fable', emoji: '🎭', desc: 'Expressiva/Narradora' },
+                  ].map((voice) => (
+                    <button
+                      key={voice.id}
+                      type="button"
+                      onClick={() => handleAudioResponseVoiceChange(voice.id)}
+                      className={`p-3 rounded-lg border text-left transition-all ${
+                        formData.audioResponseVoice === voice.id 
+                          ? 'border-primary bg-primary/10 ring-2 ring-primary/20' 
+                          : 'border-border bg-muted hover:border-primary/50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">{voice.emoji}</span>
+                        <span className="text-sm font-medium">{voice.label}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{voice.desc}</p>
+                    </button>
+                  ))}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Usa OpenAI TTS para gerar áudio natural em português.
+                <p className="text-xs text-muted-foreground mt-2">
+                  💡 Usa OpenAI TTS para gerar áudio natural. Teste as vozes no <a href="https://platform.openai.com/docs/guides/text-to-speech" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">playground da OpenAI</a>.
                 </p>
               </div>
             )}
