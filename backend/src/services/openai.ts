@@ -259,6 +259,7 @@ Ao usar notify_human, forneça:
 - reason: Motivo claro da transferência
 - summary: Resumo do que o cliente precisa
 - customer_name: Nome do cliente se mencionado na conversa`;
+    }
 
     const client = await getAgentOpenAIClient(agent);
     const model = agent.openai_model || process.env.OPENAI_MODEL || 'gpt-4o';
