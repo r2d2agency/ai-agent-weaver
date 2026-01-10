@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock } from 'lucide-react';
+import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,9 @@ const AgentDetailsPage = () => {
     widgetEnabled: false,
     ghostMode: false,
     takeoverTimeout: 60,
+    inactivityEnabled: false,
+    inactivityTimeout: 5,
+    inactivityMessage: 'Parece que você foi embora. Qualquer coisa, estou por aqui! 👋',
   });
 
   const [testingInstance, setTestingInstance] = useState(false);
@@ -58,6 +61,9 @@ const AgentDetailsPage = () => {
         widgetEnabled: agentData.widget_enabled === true,
         ghostMode: agentData.ghost_mode === true,
         takeoverTimeout: agentData.takeover_timeout || 60,
+        inactivityEnabled: agentData.inactivity_enabled === true,
+        inactivityTimeout: agentData.inactivity_timeout || 5,
+        inactivityMessage: agentData.inactivity_message || 'Parece que você foi embora. Qualquer coisa, estou por aqui! 👋',
       });
     }
   }, [agentData]);
@@ -110,6 +116,26 @@ const AgentDetailsPage = () => {
     updateAgentMutation.mutate({
       id,
       data: { takeoverTimeout: value } as any,
+    });
+  };
+
+  const handleToggleInactivity = (enabled: boolean) => {
+    if (!id) return;
+    setFormData(prev => ({ ...prev, inactivityEnabled: enabled }));
+    updateAgentMutation.mutate({
+      id,
+      data: { inactivityEnabled: enabled } as any,
+    });
+  };
+
+  const handleInactivitySettingsChange = () => {
+    if (!id) return;
+    updateAgentMutation.mutate({
+      id,
+      data: { 
+        inactivityTimeout: formData.inactivityTimeout,
+        inactivityMessage: formData.inactivityMessage,
+      } as any,
     });
   };
 
@@ -493,6 +519,55 @@ const AgentDetailsPage = () => {
               />
               <span className="text-sm text-muted-foreground">segundos</span>
             </div>
+          </motion.div>
+
+          {/* Inactivity Timeout Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.177 }}
+            className="glass-card p-6"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                <Timer className="w-4 h-4 text-primary" />
+                Timeout de Inatividade
+              </h3>
+              <Switch
+                checked={formData.inactivityEnabled}
+                onCheckedChange={handleToggleInactivity}
+              />
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Envia uma mensagem de encerramento se o usuário parar de responder.
+            </p>
+            {formData.inactivityEnabled && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <Clock className="w-4 h-4 text-muted-foreground" />
+                  <Input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={formData.inactivityTimeout}
+                    onChange={(e) => setFormData(prev => ({ ...prev, inactivityTimeout: parseInt(e.target.value) || 5 }))}
+                    onBlur={handleInactivitySettingsChange}
+                    className="w-20 bg-muted border-border"
+                  />
+                  <span className="text-sm text-muted-foreground">minutos</span>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Mensagem de encerramento</Label>
+                  <Textarea
+                    value={formData.inactivityMessage}
+                    onChange={(e) => setFormData(prev => ({ ...prev, inactivityMessage: e.target.value }))}
+                    onBlur={handleInactivitySettingsChange}
+                    className="bg-muted border-border min-h-[60px] text-sm"
+                    placeholder="Mensagem enviada quando o usuário não responde..."
+                  />
+                </div>
+              </div>
+            )}
           </motion.div>
 
           {/* Audio Processing Card */}

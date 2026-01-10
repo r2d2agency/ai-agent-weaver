@@ -24,6 +24,9 @@ export async function initDatabase() {
         widget_enabled BOOLEAN DEFAULT false,
         ghost_mode BOOLEAN DEFAULT false,
         takeover_timeout INTEGER DEFAULT 60,
+        inactivity_enabled BOOLEAN DEFAULT false,
+        inactivity_timeout INTEGER DEFAULT 5,
+        inactivity_message TEXT DEFAULT 'Parece que você foi embora. Qualquer coisa, estou por aqui! 👋',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -107,6 +110,17 @@ export async function initDatabase() {
         UNIQUE(agent_id, phone_number)
       );
 
+      -- Track last activity per conversation for inactivity timeout
+      CREATE TABLE IF NOT EXISTS conversation_activity (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agent_id UUID REFERENCES agents(id) ON DELETE CASCADE NOT NULL,
+        phone_number VARCHAR(50) NOT NULL,
+        last_user_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_agent_message_at TIMESTAMP,
+        inactivity_message_sent BOOLEAN DEFAULT false,
+        UNIQUE(agent_id, phone_number)
+      );
+
       -- Add new columns if they don't exist (for existing databases)
       DO $$ 
       BEGIN 
@@ -121,6 +135,15 @@ export async function initDatabase() {
         END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='takeover_timeout') THEN
           ALTER TABLE agents ADD COLUMN takeover_timeout INTEGER DEFAULT 60;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='inactivity_enabled') THEN
+          ALTER TABLE agents ADD COLUMN inactivity_enabled BOOLEAN DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='inactivity_timeout') THEN
+          ALTER TABLE agents ADD COLUMN inactivity_timeout INTEGER DEFAULT 5;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='inactivity_message') THEN
+          ALTER TABLE agents ADD COLUMN inactivity_message TEXT DEFAULT 'Parece que você foi embora. Qualquer coisa, estou por aqui! 👋';
         END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='is_audio') THEN
           ALTER TABLE messages ADD COLUMN is_audio BOOLEAN DEFAULT false;
