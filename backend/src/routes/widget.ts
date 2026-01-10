@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { query } from '../services/database.js';
 import { generateWidgetResponse } from '../services/openai.js';
+import { findMatchingFaq, logFaqUsage } from './faq.js';
 import { v4 as uuidv4 } from 'uuid';
 
 export const widgetRouter = Router();
@@ -63,10 +64,29 @@ widgetRouter.post('/chat/:agentId', async (req, res) => {
     const agent = agentResult.rows[0];
     const currentSessionId = sessionId || uuidv4();
     
-    // Generate response
-    const response = await generateWidgetResponse(agent, message, currentSessionId, history || []);
+    let response: string;
+    let fromFaq = false;
     
-    // Save widget message (optional, for analytics)
+    // Check FAQ first to save API calls
+    const faqMatch = await findMatchingFaq(agentId, message);
+    
+    if (faqMatch && faqMatch.score >= 3) {
+      // Use FAQ answer
+      response = faqMatch.faq.answer;
+      fromFaq = true;
+      
+      // Log FAQ usage
+      await logFaqUsage(faqMatch.faq.id, agentId, currentSessionId, 'widget');
+      console.log(`[Widget] FAQ match found for "${message}" -> "${faqMatch.faq.question}" (score: ${faqMatch.score})`);
+    } else {
+      // Generate response using AI
+      response = await generateWidgetResponse(agent, message, currentSessionId, history || []);
+    }
+    
+    // Split long responses into parts (for more natural conversation)
+    const responseParts = splitMessage(response);
+    
+    // Save widget messages (optional, for analytics)
     try {
       await query(
         `INSERT INTO widget_messages (agent_id, session_id, sender, content) 
@@ -85,7 +105,9 @@ widgetRouter.post('/chat/:agentId', async (req, res) => {
     }
     
     res.json({ 
-      response, 
+      response: responseParts.length > 1 ? responseParts : response,
+      isMultipart: responseParts.length > 1,
+      fromFaq,
       sessionId: currentSessionId 
     });
   } catch (error) {
@@ -93,6 +115,63 @@ widgetRouter.post('/chat/:agentId', async (req, res) => {
     res.status(500).json({ error: 'Failed to generate response' });
   }
 });
+
+// Helper to split long messages into smaller parts
+function splitMessage(text: string): string[] {
+  // If message is short, return as is
+  if (text.length <= 300) {
+    return [text];
+  }
+  
+  const parts: string[] = [];
+  
+  // First, check if message already has natural breaks (--- or double newlines)
+  if (text.includes('---')) {
+    const segments = text.split('---').map(s => s.trim()).filter(Boolean);
+    if (segments.length > 1) {
+      return segments;
+    }
+  }
+  
+  // Split by double newlines (paragraphs)
+  const paragraphs = text.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
+  
+  if (paragraphs.length > 1) {
+    // Group small paragraphs together
+    let currentPart = '';
+    for (const para of paragraphs) {
+      if (currentPart.length + para.length > 400 && currentPart.length > 0) {
+        parts.push(currentPart.trim());
+        currentPart = para;
+      } else {
+        currentPart += (currentPart ? '\n\n' : '') + para;
+      }
+    }
+    if (currentPart) {
+      parts.push(currentPart.trim());
+    }
+    return parts.length > 1 ? parts : [text];
+  }
+  
+  // Split by sentences if no paragraphs
+  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+  let currentPart = '';
+  
+  for (const sentence of sentences) {
+    if (currentPart.length + sentence.length > 350 && currentPart.length > 0) {
+      parts.push(currentPart.trim());
+      currentPart = sentence;
+    } else {
+      currentPart += sentence;
+    }
+  }
+  
+  if (currentPart) {
+    parts.push(currentPart.trim());
+  }
+  
+  return parts.length > 1 ? parts : [text];
+}
 
 // Get embed script
 widgetRouter.get('/embed/:agentId', async (req, res) => {
@@ -420,9 +499,37 @@ widgetRouter.get('/embed/:agentId', async (req, res) => {
       .then(function(data) {
         hideTyping();
         if (data.response) {
-          addMessage(data.response, 'agent');
-          history.push({ role: 'assistant', content: data.response });
-          sessionId = data.sessionId;
+          // Handle multipart responses (broken into smaller messages)
+          if (data.isMultipart && Array.isArray(data.response)) {
+            var fullResponse = data.response.join('\\n\\n');
+            history.push({ role: 'assistant', content: fullResponse });
+            
+            // Add each part with a small delay for natural feel
+            var parts = data.response;
+            var addPart = function(index) {
+              if (index >= parts.length) {
+                sessionId = data.sessionId;
+                return;
+              }
+              addMessage(parts[index], 'agent');
+              if (index < parts.length - 1) {
+                showTyping();
+                setTimeout(function() {
+                  hideTyping();
+                  addPart(index + 1);
+                }, 800 + Math.random() * 400); // 800-1200ms delay between parts
+              } else {
+                sessionId = data.sessionId;
+              }
+            };
+            addPart(0);
+          } else {
+            // Single message response
+            var responseText = Array.isArray(data.response) ? data.response[0] : data.response;
+            addMessage(responseText, 'agent');
+            history.push({ role: 'assistant', content: responseText });
+            sessionId = data.sessionId;
+          }
         }
       })
       .catch(function(err) {

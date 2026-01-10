@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, Images, File, Key, Link2, Upload, Palette, Video } from 'lucide-react';
+import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, Images, File, Key, Link2, Upload, Palette, Video, HelpCircle } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import { TestAgentModal } from '@/components/agents/TestAgentModal';
 import { AgentDocumentsModal } from '@/components/agents/AgentDocumentsModal';
 import { AgentMediaModal } from '@/components/agents/AgentMediaModal';
 import { AgentConversationsModal } from '@/components/agents/AgentConversationsModal';
+import { AgentFaqModal } from '@/components/agents/AgentFaqModal';
 
 const AgentDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -65,6 +66,7 @@ const AgentDetailsPage = () => {
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
   const [mediaModalOpen, setMediaModalOpen] = useState(false);
   const [conversationsModalOpen, setConversationsModalOpen] = useState(false);
+  const [faqModalOpen, setFaqModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [webhookCopied, setWebhookCopied] = useState(false);
 
@@ -666,6 +668,30 @@ const AgentDetailsPage = () => {
             >
               <MessageSquare className="w-4 h-4 mr-2" />
               Ver Conversas
+            </Button>
+          </motion.div>
+
+          {/* FAQ Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.167 }}
+            className="glass-card p-6"
+          >
+            <h3 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+              <HelpCircle className="w-4 h-4 text-primary" />
+              Perguntas Frequentes
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Respostas automáticas sem usar a API.
+            </p>
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={() => setFaqModalOpen(true)}
+            >
+              <HelpCircle className="w-4 h-4 mr-2" />
+              Gerenciar FAQs
             </Button>
           </motion.div>
 
@@ -1339,6 +1365,12 @@ const AgentDetailsPage = () => {
       <AgentConversationsModal
         open={conversationsModalOpen}
         onOpenChange={setConversationsModalOpen}
+        agent={agentData ? { id: agentData.id, name: agentData.name } : null}
+      />
+
+      <AgentFaqModal
+        open={faqModalOpen}
+        onOpenChange={setFaqModalOpen}
         agent={agentData ? { id: agentData.id, name: agentData.name } : null}
       />
     </MainLayout>

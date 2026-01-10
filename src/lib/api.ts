@@ -146,3 +146,27 @@ export const testOpenAIConnection = (key: string) =>
     method: 'POST',
     body: JSON.stringify({ key }),
   });
+
+// FAQs
+export const getFaqs = (agentId: string) => 
+  apiRequest<any[]>(`/api/faq/${agentId}`);
+
+export const getFaqStats = (agentId: string) =>
+  apiRequest<{ topFaqs: any[]; usageOverTime: any[]; totalApiCallsSaved: number }>(`/api/faq/${agentId}/stats`);
+
+export const createFaq = (agentId: string, data: { question: string; answer: string; keywords?: string[] }) =>
+  apiRequest<any>(`/api/faq/${agentId}`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const updateFaq = (agentId: string, faqId: string, data: Partial<{ question: string; answer: string; keywords: string[]; is_active: boolean }>) =>
+  apiRequest<any>(`/api/faq/${agentId}/${faqId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+
+export const deleteFaq = (agentId: string, faqId: string) =>
+  apiRequest<{ success: boolean }>(`/api/faq/${agentId}/${faqId}`, {
+    method: 'DELETE',
+  });
