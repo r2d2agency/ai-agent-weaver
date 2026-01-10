@@ -2,7 +2,7 @@ import axios from 'axios';
 import { query } from './database.js';
 
 // Get Evolution API credentials from env or database
-async function getEvolutionCredentials(): Promise<{ apiUrl: string; apiKey: string }> {
+export async function getEvolutionCredentials(): Promise<{ apiUrl: string; apiKey: string }> {
   let apiUrl = process.env.EVOLUTION_API_URL;
   let apiKey = process.env.EVOLUTION_API_KEY;
 

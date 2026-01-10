@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube } from 'lucide-react';
+import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { useAgent, useUpdateAgent, useDeleteAgent } from '@/hooks/use-agents';
 import { useToast } from '@/hooks/use-toast';
 import { API_BASE_URL } from '@/lib/api';
@@ -29,11 +30,14 @@ const AgentDetailsPage = () => {
     instanceName: '',
     webhookUrl: '',
     token: '',
+    audioEnabled: true,
+    widgetEnabled: false,
   });
 
   const [testingInstance, setTestingInstance] = useState(false);
   const [instanceStatus, setInstanceStatus] = useState<'idle' | 'connected' | 'disconnected' | 'error'>('idle');
   const [testAgentModalOpen, setTestAgentModalOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (agentData) {
@@ -44,6 +48,8 @@ const AgentDetailsPage = () => {
         instanceName: agentData.instance_name || '',
         webhookUrl: agentData.webhook_url || '',
         token: agentData.token || '',
+        audioEnabled: agentData.audio_enabled !== false,
+        widgetEnabled: agentData.widget_enabled === true,
       });
     }
   }, [agentData]);
@@ -61,6 +67,35 @@ const AgentDetailsPage = () => {
         token: formData.token,
       },
     });
+  };
+
+  const handleToggleAudio = (enabled: boolean) => {
+    if (!id) return;
+    setFormData(prev => ({ ...prev, audioEnabled: enabled }));
+    updateAgentMutation.mutate({
+      id,
+      data: { audioEnabled: enabled } as any,
+    });
+  };
+
+  const handleToggleWidget = (enabled: boolean) => {
+    if (!id) return;
+    setFormData(prev => ({ ...prev, widgetEnabled: enabled }));
+    updateAgentMutation.mutate({
+      id,
+      data: { widgetEnabled: enabled } as any,
+    });
+  };
+
+  const copyEmbedCode = () => {
+    const embedCode = `<script src="${API_BASE_URL}/api/widget/embed/${id}"></script>`;
+    navigator.clipboard.writeText(embedCode);
+    setCopied(true);
+    toast({
+      title: 'Código copiado!',
+      description: 'Cole o código no HTML do seu site.',
+    });
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleToggleStatus = () => {
@@ -333,6 +368,69 @@ const AgentDetailsPage = () => {
               <TestTube className="w-4 h-4 mr-2" />
               Abrir Chat de Teste
             </Button>
+          </motion.div>
+
+          {/* Audio Processing Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.17 }}
+            className="glass-card p-6"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                <Mic className="w-4 h-4 text-primary" />
+                Processar Áudio
+              </h3>
+              <Switch
+                checked={formData.audioEnabled}
+                onCheckedChange={handleToggleAudio}
+              />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Transcreve mensagens de áudio do WhatsApp automaticamente usando IA.
+            </p>
+          </motion.div>
+
+          {/* Widget Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.19 }}
+            className="glass-card p-6"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                <Globe className="w-4 h-4 text-primary" />
+                Widget para Site
+              </h3>
+              <Switch
+                checked={formData.widgetEnabled}
+                onCheckedChange={handleToggleWidget}
+              />
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Adicione este agente como um chat em seu site.
+            </p>
+            {formData.widgetEnabled && (
+              <div className="space-y-2">
+                <Label className="text-xs">Código de Incorporação</Label>
+                <div className="flex gap-2">
+                  <Input
+                    readOnly
+                    value={`<script src="${API_BASE_URL}/api/widget/embed/${id}"></script>`}
+                    className="bg-muted border-border text-xs font-mono"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={copyEmbedCode}
+                  >
+                    {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                </div>
+              </div>
+            )}
           </motion.div>
 
           {/* Stats Card */}
