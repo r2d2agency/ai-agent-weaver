@@ -717,6 +717,36 @@ webhookRouter.post('/:instanceName', async (req, res) => {
       return res.status(200).json({ status: 'ignored', reason: 'no content' });
     }
 
+    // Check for reset code (training mode)
+    const resetCode = agent.widget_reset_code;
+    if (resetCode && messageContent.trim().toLowerCase() === resetCode.toLowerCase()) {
+      console.log(`Reset code detected for ${phoneNumber}, clearing conversation history`);
+      
+      // Delete all messages for this phone number with this agent
+      await query(
+        `DELETE FROM messages WHERE agent_id = $1 AND phone_number = $2`,
+        [agent.id, phoneNumber]
+      );
+      
+      // Reset conversation activity
+      await query(
+        `DELETE FROM conversation_activity WHERE agent_id = $1 AND phone_number = $2`,
+        [agent.id, phoneNumber]
+      );
+      
+      // Remove any takeover
+      await query(
+        `DELETE FROM conversation_takeover WHERE agent_id = $1 AND phone_number = $2`,
+        [agent.id, phoneNumber]
+      );
+      
+      // Send confirmation message
+      await sendMessage(instanceName, phoneNumber, '✅ Conversa reiniciada! Como posso ajudar?', agent);
+      
+      console.log(`Conversation reset for ${phoneNumber}`);
+      return res.status(200).json({ status: 'ok', reason: 'conversation_reset' });
+    }
+
     // If message is from owner (fromMe), store it and set takeover
     if (isFromMe) {
       await query(
