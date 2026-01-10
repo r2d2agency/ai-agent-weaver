@@ -86,6 +86,35 @@ webhookRouter.post('/:instanceName', async (req, res) => {
     const audioEnabled = agent.audio_enabled !== false; // Default to true
     const ghostMode = agent.ghost_mode === true;
     const takeoverTimeout = agent.takeover_timeout || 60; // Default 60 seconds
+    const operatingHoursEnabled = agent.operating_hours_enabled === true;
+
+    // Helper function to check if current time is within operating hours
+    const isWithinOperatingHours = (): boolean => {
+      if (!operatingHoursEnabled) return true;
+      
+      const timezone = agent.operating_hours_timezone || 'America/Sao_Paulo';
+      const now = new Date();
+      
+      // Get current time in agent's timezone
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+      const parts = formatter.formatToParts(now);
+      const currentHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
+      const currentMinute = parseInt(parts.find(p => p.type === 'minute')?.value || '0');
+      const currentTimeMinutes = currentHour * 60 + currentMinute;
+      
+      // Parse operating hours
+      const [startHour, startMinute] = (agent.operating_hours_start || '09:00').split(':').map(Number);
+      const [endHour, endMinute] = (agent.operating_hours_end || '18:00').split(':').map(Number);
+      const startTimeMinutes = startHour * 60 + startMinute;
+      const endTimeMinutes = endHour * 60 + endMinute;
+      
+      return currentTimeMinutes >= startTimeMinutes && currentTimeMinutes < endTimeMinutes;
+    };
 
     let messageContent: string | null = null;
     let isAudioMessage = false;
@@ -176,6 +205,29 @@ webhookRouter.post('/:instanceName', async (req, res) => {
       );
       console.log(`Ghost mode: message stored for ${phoneNumber}, no response sent`);
       return res.status(200).json({ status: 'ok', reason: 'ghost_mode', messageStored: true });
+    }
+
+    // Check if outside operating hours
+    if (operatingHoursEnabled && !isWithinOperatingHours()) {
+      const outOfHoursMessage = agent.out_of_hours_message || 'Olá! Nosso horário de atendimento é das 09:00 às 18:00. Deixe sua mensagem que responderemos assim que possível! 🕐';
+      
+      // Send out of hours message
+      await sendMessage(instanceName, phoneNumber, outOfHoursMessage);
+      
+      // Save the message
+      await query(
+        `INSERT INTO messages (agent_id, sender, content, phone_number, status, is_from_owner) 
+         VALUES ($1, 'agent', $2, $3, 'sent', false)`,
+        [agent.id, outOfHoursMessage, phoneNumber]
+      );
+      
+      await query(
+        `UPDATE agents SET messages_count = messages_count + 2, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+        [agent.id]
+      );
+      
+      console.log(`Out of hours: sent automated message to ${phoneNumber}`);
+      return res.status(200).json({ status: 'ok', reason: 'out_of_hours', messageSent: true });
     }
 
     // Check if conversation is under takeover
