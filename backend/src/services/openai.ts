@@ -230,19 +230,34 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
     let mediaToSend: MediaItem[] = [];
 
     // Check for tool calls
+    console.log('=== OpenAI Response Debug ===');
+    console.log('Model used:', model);
+    console.log('Has tool_calls:', !!message?.tool_calls);
+    console.log('Tool calls count:', message?.tool_calls?.length || 0);
+    console.log('Text content:', message?.content?.substring(0, 200));
+    
     if (message?.tool_calls && message.tool_calls.length > 0) {
+      console.log('=== Tool Calls Details ===');
       let toolSuggestedMessage: string | null = null;
 
       for (const toolCall of message.tool_calls) {
+        console.log('Tool call ID:', toolCall.id);
+        console.log('Tool name:', toolCall.function.name);
+        console.log('Tool arguments (raw):', toolCall.function.arguments);
+        
         if (toolCall.function.name === 'send_media') {
           try {
             const args = JSON.parse(toolCall.function.arguments);
+            console.log('Parsed media_names:', args.media_names);
+            console.log('Parsed message:', args.message);
+            
             const mediaNames: string[] = args.media_names || [];
             const additionalMessage: string = args.message || '';
 
             if (additionalMessage) toolSuggestedMessage = additionalMessage;
 
             console.log(`Tool call send_media with names: ${mediaNames.join(', ')}`);
+            console.log('Available media items:', mediaItems.map(m => m.name).join(', '));
 
             // Find matching media items (more flexible matching)
             for (const name of mediaNames) {
@@ -253,9 +268,9 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
               );
               if (found) {
                 mediaToSend.push(found);
-                console.log(`Found media: ${found.name}`);
+                console.log(`✓ Found media match: "${name}" -> "${found.name}"`);
               } else {
-                console.log(`Media not found: ${name}`);
+                console.log(`✗ Media not found: "${name}"`);
               }
             }
           } catch (e) {
@@ -266,12 +281,16 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
 
       // If tool is used, avoid confirming delivery in the past tense.
       if (mediaToSend.length > 0) {
+        console.log(`=== Sending ${mediaToSend.length} media items ===`);
         textResponse = toolSuggestedMessage || 'Perfeito — vou te enviar agora.';
       } else {
+        console.log('=== No media matched, sending fallback message ===');
         textResponse =
           toolSuggestedMessage ||
           'Entendi. Não encontrei esse item na minha galeria agora. Você pode me dizer o nome do produto ou mandar mais detalhes/foto?';
       }
+    } else {
+      console.log('=== No tool calls - Regular text response ===');
     }
 
     if (!textResponse && mediaToSend.length === 0) {
