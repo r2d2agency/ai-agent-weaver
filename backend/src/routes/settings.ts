@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { query } from '../services/database.js';
+import { testEvolutionConnection, testInstanceConnection, fetchAllInstances } from '../services/evolution.js';
+import { resetOpenAIClient } from '../services/openai.js';
 
 export const settingsRouter = Router();
 
@@ -34,6 +36,9 @@ settingsRouter.put('/', async (req, res) => {
         [key, value as string]
       );
     }
+
+    // Reset OpenAI client to use new API key
+    resetOpenAIClient();
     
     res.json({ message: 'Settings updated successfully' });
   } catch (error) {
@@ -47,18 +52,40 @@ settingsRouter.post('/test-evolution', async (req, res) => {
   try {
     const { apiUrl, apiKey } = req.body;
     
-    const response = await fetch(`${apiUrl}/instance/fetchInstances`, {
-      headers: { 'apikey': apiKey },
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      res.json({ success: true, instances: data });
-    } else {
-      res.json({ success: false, error: 'Invalid API credentials' });
+    if (!apiUrl || !apiKey) {
+      return res.status(400).json({ success: false, error: 'URL and API Key are required' });
     }
+
+    const result = await testEvolutionConnection(apiUrl, apiKey);
+    res.json(result);
   } catch (error) {
     res.json({ success: false, error: 'Connection failed' });
+  }
+});
+
+// Test specific Evolution instance
+settingsRouter.post('/test-instance', async (req, res) => {
+  try {
+    const { instanceName } = req.body;
+    
+    if (!instanceName) {
+      return res.status(400).json({ success: false, error: 'Instance name is required' });
+    }
+
+    const result = await testInstanceConnection(instanceName);
+    res.json(result);
+  } catch (error: any) {
+    res.json({ success: false, error: error.message || 'Connection failed' });
+  }
+});
+
+// Get all Evolution instances
+settingsRouter.get('/instances', async (req, res) => {
+  try {
+    const instances = await fetchAllInstances();
+    res.json({ success: true, instances });
+  } catch (error: any) {
+    res.json({ success: false, error: error.message || 'Failed to fetch instances' });
   }
 });
 
