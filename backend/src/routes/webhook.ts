@@ -79,11 +79,12 @@ async function processAndRespond(
   phoneNumber: string,
   instanceName: string
 ) {
+  let agent: any = null;
   try {
     // Get agent fresh from DB
     const agentResult = await query('SELECT * FROM agents WHERE id = $1', [agentId]);
     if (agentResult.rows.length === 0) return;
-    const agent = agentResult.rows[0];
+    agent = agentResult.rows[0];
 
     const ghostMode = agent.ghost_mode === true;
     const takeoverTimeout = agent.takeover_timeout || 60;
