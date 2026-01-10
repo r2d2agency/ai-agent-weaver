@@ -245,6 +245,11 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
       systemPrompt += mediaContext;
     }
 
+    // Build conversation history summary for notify_human
+    const historyForSummary = history
+      .map((msg, i) => `${msg.role === 'user' ? 'Cliente' : 'Agente'}: ${msg.content}`)
+      .join('\n');
+
     // Add notify_human context if notification number is configured
     if (agent.notification_number) {
       systemPrompt += `\n\n## Transferência para Atendente Humano:
@@ -255,9 +260,14 @@ Use a função "notify_human" quando:
 - A situação for complexa e requer análise humana
 - O cliente estiver insatisfeito ou frustrado
 
+IMPORTANTE: Ao usar notify_human, NÃO responda ao cliente com texto. Apenas chame a função notify_human.
 Ao usar notify_human, forneça:
-- reason: Motivo claro da transferência
-- summary: Resumo do que o cliente precisa
+- reason: Motivo claro e conciso da transferência
+- summary: Histórico completo da conversa, incluindo TODAS as mensagens abaixo:
+
+${historyForSummary}
+
+Inclua também a mensagem atual do cliente no summary.
 - customer_name: Nome do cliente se mencionado na conversa`;
     }
 
@@ -469,7 +479,10 @@ Ao usar notify_human, forneça:
       // Handle response based on tool calls
       if (notifyHuman) {
         console.log('=== Human notification requested ===');
-        textResponse = toolSuggestedMessage || 'Entendido! Estou acionando um atendente humano para te ajudar. Em breve você será atendido. 🙌';
+        // Only set a single message for the customer - don't use AI text to avoid duplicates
+        textResponse = 'Entendido! Estou acionando um atendente humano para te ajudar. Em breve você será atendido. 🙌';
+        // Clear any media to avoid sending extra content during transfer
+        mediaToSend = [];
       } else if (mediaToSend.length > 0) {
         console.log(`=== Sending ${mediaToSend.length} media items ===`);
         textResponse = toolSuggestedMessage || 'Perfeito — vou te enviar agora.';
