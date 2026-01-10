@@ -17,6 +17,7 @@ interface CreateAgentModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: AgentFormData) => void;
+  isLoading?: boolean;
 }
 
 export interface AgentFormData {
@@ -29,7 +30,7 @@ export interface AgentFormData {
   documents: File[];
 }
 
-export function CreateAgentModal({ open, onOpenChange, onSubmit }: CreateAgentModalProps) {
+export function CreateAgentModal({ open, onOpenChange, onSubmit, isLoading }: CreateAgentModalProps) {
   const [formData, setFormData] = useState<AgentFormData>({
     name: '',
     description: '',
@@ -255,9 +256,9 @@ export function CreateAgentModal({ open, onOpenChange, onSubmit }: CreateAgentMo
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" className="btn-primary-gradient">
+            <Button type="submit" className="btn-primary-gradient" disabled={isLoading}>
               <Wand2 className="w-4 h-4 mr-2" />
-              Criar Agente
+              {isLoading ? 'Criando...' : 'Criar Agente'}
             </Button>
           </div>
         </form>
