@@ -1,5 +1,5 @@
 // Backend API configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://whats-agente-backend.isyhhh.easypanel.host:3000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://whats-agente-backend.isyhhh.easypanel.host';
 
 async function apiRequest<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
