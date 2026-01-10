@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock } from 'lucide-react';
+import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, File, Key } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,8 @@ const AgentDetailsPage = () => {
     webhookUrl: '',
     token: '',
     audioEnabled: true,
+    imageEnabled: true,
+    documentEnabled: true,
     widgetEnabled: false,
     ghostMode: false,
     takeoverTimeout: 60,
@@ -43,6 +45,8 @@ const AgentDetailsPage = () => {
     operatingHoursStart: '09:00',
     operatingHoursEnd: '18:00',
     outOfHoursMessage: 'Olá! Nosso horário de atendimento é das 09:00 às 18:00. Deixe sua mensagem que responderemos assim que possível! 🕐',
+    openaiApiKey: '',
+    openaiModel: 'gpt-4o',
   });
 
   const [testingInstance, setTestingInstance] = useState(false);
@@ -62,6 +66,8 @@ const AgentDetailsPage = () => {
         webhookUrl: agentData.webhook_url || '',
         token: agentData.token || '',
         audioEnabled: agentData.audio_enabled !== false,
+        imageEnabled: agentData.image_enabled !== false,
+        documentEnabled: agentData.document_enabled !== false,
         widgetEnabled: agentData.widget_enabled === true,
         ghostMode: agentData.ghost_mode === true,
         takeoverTimeout: agentData.takeover_timeout || 60,
@@ -72,6 +78,8 @@ const AgentDetailsPage = () => {
         operatingHoursStart: agentData.operating_hours_start || '09:00',
         operatingHoursEnd: agentData.operating_hours_end || '18:00',
         outOfHoursMessage: agentData.out_of_hours_message || 'Olá! Nosso horário de atendimento é das 09:00 às 18:00. Deixe sua mensagem que responderemos assim que possível! 🕐',
+        openaiApiKey: agentData.openai_api_key || '',
+        openaiModel: agentData.openai_model || 'gpt-4o',
       });
     }
   }, [agentData]);
@@ -97,6 +105,35 @@ const AgentDetailsPage = () => {
     updateAgentMutation.mutate({
       id,
       data: { audioEnabled: enabled } as any,
+    });
+  };
+
+  const handleToggleImage = (enabled: boolean) => {
+    if (!id) return;
+    setFormData(prev => ({ ...prev, imageEnabled: enabled }));
+    updateAgentMutation.mutate({
+      id,
+      data: { imageEnabled: enabled } as any,
+    });
+  };
+
+  const handleToggleDocument = (enabled: boolean) => {
+    if (!id) return;
+    setFormData(prev => ({ ...prev, documentEnabled: enabled }));
+    updateAgentMutation.mutate({
+      id,
+      data: { documentEnabled: enabled } as any,
+    });
+  };
+
+  const handleOpenAISettingsChange = () => {
+    if (!id) return;
+    updateAgentMutation.mutate({
+      id,
+      data: { 
+        openaiApiKey: formData.openaiApiKey || null,
+        openaiModel: formData.openaiModel,
+      } as any,
     });
   };
 
@@ -673,6 +710,103 @@ const AgentDetailsPage = () => {
             <p className="text-sm text-muted-foreground">
               Transcreve mensagens de áudio do WhatsApp automaticamente usando IA.
             </p>
+          </motion.div>
+
+          {/* Image Processing Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.185 }}
+            className="glass-card p-6"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                <Image className="w-4 h-4 text-primary" />
+                Processar Imagens
+              </h3>
+              <Switch
+                checked={formData.imageEnabled}
+                onCheckedChange={handleToggleImage}
+              />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Analisa imagens recebidas usando GPT-4 Vision.
+            </p>
+          </motion.div>
+
+          {/* Document Processing Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.187 }}
+            className="glass-card p-6"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                <File className="w-4 h-4 text-primary" />
+                Processar Documentos
+              </h3>
+              <Switch
+                checked={formData.documentEnabled}
+                onCheckedChange={handleToggleDocument}
+              />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Analisa PDFs e documentos recebidos.
+            </p>
+          </motion.div>
+
+          {/* OpenAI API Key Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.188 }}
+            className="glass-card p-6"
+          >
+            <h3 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+              <Key className="w-4 h-4 text-primary" />
+              OpenAI deste Agente
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Configure uma API key exclusiva para rastrear o consumo deste agente.
+            </p>
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label className="text-xs">API Key (opcional)</Label>
+                <Input
+                  type="password"
+                  placeholder="sk-..."
+                  value={formData.openaiApiKey}
+                  onChange={(e) => setFormData(prev => ({ ...prev, openaiApiKey: e.target.value }))}
+                  onBlur={handleOpenAISettingsChange}
+                  className="bg-muted border-border text-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs">Modelo</Label>
+                <select
+                  value={formData.openaiModel}
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, openaiModel: e.target.value }));
+                    if (id) {
+                      updateAgentMutation.mutate({
+                        id,
+                        data: { openaiModel: e.target.value } as any,
+                      });
+                    }
+                  }}
+                  className="w-full h-10 px-3 rounded-md bg-muted border border-border text-sm"
+                >
+                  <option value="gpt-4o">GPT-4o (recomendado)</option>
+                  <option value="gpt-4o-mini">GPT-4o Mini (mais barato)</option>
+                  <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                  <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                </select>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Se vazio, usa a API key global configurada em Configurações.
+              </p>
+            </div>
           </motion.div>
 
           {/* Widget Card */}

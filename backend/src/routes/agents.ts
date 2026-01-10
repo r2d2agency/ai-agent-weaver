@@ -61,9 +61,10 @@ agentsRouter.put('/:id', async (req, res) => {
   try {
     const { 
       name, description, prompt, instanceName, webhookUrl, token, status, 
-      audioEnabled, widgetEnabled, ghostMode, takeoverTimeout,
+      audioEnabled, imageEnabled, documentEnabled, widgetEnabled, ghostMode, takeoverTimeout,
       inactivityEnabled, inactivityTimeout, inactivityMessage,
-      operatingHoursEnabled, operatingHoursStart, operatingHoursEnd, operatingHoursTimezone, outOfHoursMessage
+      operatingHoursEnabled, operatingHoursStart, operatingHoursEnd, operatingHoursTimezone, outOfHoursMessage,
+      openaiApiKey, openaiModel
     } = req.body;
     
     const result = await query(
@@ -76,21 +77,25 @@ agentsRouter.put('/:id', async (req, res) => {
            token = COALESCE($6, token),
            status = COALESCE($7, status),
            audio_enabled = COALESCE($8, audio_enabled),
-           widget_enabled = COALESCE($9, widget_enabled),
-           ghost_mode = COALESCE($10, ghost_mode),
-           takeover_timeout = COALESCE($11, takeover_timeout),
-           inactivity_enabled = COALESCE($12, inactivity_enabled),
-           inactivity_timeout = COALESCE($13, inactivity_timeout),
-           inactivity_message = COALESCE($14, inactivity_message),
-           operating_hours_enabled = COALESCE($15, operating_hours_enabled),
-           operating_hours_start = COALESCE($16, operating_hours_start),
-           operating_hours_end = COALESCE($17, operating_hours_end),
-           operating_hours_timezone = COALESCE($18, operating_hours_timezone),
-           out_of_hours_message = COALESCE($19, out_of_hours_message),
+           image_enabled = COALESCE($9, image_enabled),
+           document_enabled = COALESCE($10, document_enabled),
+           widget_enabled = COALESCE($11, widget_enabled),
+           ghost_mode = COALESCE($12, ghost_mode),
+           takeover_timeout = COALESCE($13, takeover_timeout),
+           inactivity_enabled = COALESCE($14, inactivity_enabled),
+           inactivity_timeout = COALESCE($15, inactivity_timeout),
+           inactivity_message = COALESCE($16, inactivity_message),
+           operating_hours_enabled = COALESCE($17, operating_hours_enabled),
+           operating_hours_start = COALESCE($18, operating_hours_start),
+           operating_hours_end = COALESCE($19, operating_hours_end),
+           operating_hours_timezone = COALESCE($20, operating_hours_timezone),
+           out_of_hours_message = COALESCE($21, out_of_hours_message),
+           openai_api_key = COALESCE($22, openai_api_key),
+           openai_model = COALESCE($23, openai_model),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $20
+       WHERE id = $24
        RETURNING *`,
-      [name, description, prompt, instanceName, webhookUrl, token, status, audioEnabled, widgetEnabled, ghostMode, takeoverTimeout, inactivityEnabled, inactivityTimeout, inactivityMessage, operatingHoursEnabled, operatingHoursStart, operatingHoursEnd, operatingHoursTimezone, outOfHoursMessage, req.params.id]
+      [name, description, prompt, instanceName, webhookUrl, token, status, audioEnabled, imageEnabled, documentEnabled, widgetEnabled, ghostMode, takeoverTimeout, inactivityEnabled, inactivityTimeout, inactivityMessage, operatingHoursEnabled, operatingHoursStart, operatingHoursEnd, operatingHoursTimezone, outOfHoursMessage, openaiApiKey, openaiModel, req.params.id]
     );
     
     if (result.rows.length === 0) {

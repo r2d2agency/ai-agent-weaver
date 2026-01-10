@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { query } from '../services/database.js';
-import { generateResponse, transcribeAudio } from '../services/openai.js';
+import { generateResponse, transcribeAudio, analyzeImage } from '../services/openai.js';
 import { sendMessage, getEvolutionCredentials } from '../services/evolution.js';
 import axios from 'axios';
 
@@ -29,32 +29,44 @@ interface WebhookPayload {
         seconds?: number;
         ptt?: boolean;
       };
+      imageMessage?: {
+        url?: string;
+        mimetype?: string;
+        caption?: string;
+        mediaKey?: string;
+      };
+      documentMessage?: {
+        url?: string;
+        mimetype?: string;
+        title?: string;
+        fileName?: string;
+        mediaKey?: string;
+      };
     };
     messageTimestamp: number;
   };
 }
 
-async function downloadAudio(instanceName: string, messageId: string): Promise<Buffer | null> {
+async function downloadMedia(instanceName: string, messageId: string): Promise<string | null> {
   try {
     const { apiUrl, apiKey } = await getEvolutionCredentials();
     
-    // Try to get media from Evolution API
     const response = await axios.get(
       `${apiUrl}/chat/getBase64FromMediaMessage/${instanceName}`,
       {
         headers: { 'apikey': apiKey },
         params: { messageId },
-        timeout: 30000,
+        timeout: 60000,
       }
     );
 
     if (response.data?.base64) {
-      return Buffer.from(response.data.base64, 'base64');
+      return response.data.base64;
     }
     
     return null;
   } catch (error) {
-    console.error('Error downloading audio:', error);
+    console.error('Error downloading media:', error);
     return null;
   }
 }
@@ -82,10 +94,12 @@ webhookRouter.post('/:instanceName', async (req, res) => {
 
     const agent = agentResult.rows[0];
     
-    // Check if audio processing is enabled for this agent
-    const audioEnabled = agent.audio_enabled !== false; // Default to true
+    // Check processing options
+    const audioEnabled = agent.audio_enabled !== false;
+    const imageEnabled = agent.image_enabled !== false;
+    const documentEnabled = agent.document_enabled !== false;
     const ghostMode = agent.ghost_mode === true;
-    const takeoverTimeout = agent.takeover_timeout || 60; // Default 60 seconds
+    const takeoverTimeout = agent.takeover_timeout || 60;
     const operatingHoursEnabled = agent.operating_hours_enabled === true;
 
     // Helper function to check if current time is within operating hours
@@ -95,7 +109,6 @@ webhookRouter.post('/:instanceName', async (req, res) => {
       const timezone = agent.operating_hours_timezone || 'America/Sao_Paulo';
       const now = new Date();
       
-      // Get current time in agent's timezone
       const formatter = new Intl.DateTimeFormat('en-US', {
         timeZone: timezone,
         hour: '2-digit',
@@ -107,7 +120,6 @@ webhookRouter.post('/:instanceName', async (req, res) => {
       const currentMinute = parseInt(parts.find(p => p.type === 'minute')?.value || '0');
       const currentTimeMinutes = currentHour * 60 + currentMinute;
       
-      // Parse operating hours
       const [startHour, startMinute] = (agent.operating_hours_start || '09:00').split(':').map(Number);
       const [endHour, endMinute] = (agent.operating_hours_end || '18:00').split(':').map(Number);
       const startTimeMinutes = startHour * 60 + startMinute;
@@ -118,21 +130,75 @@ webhookRouter.post('/:instanceName', async (req, res) => {
 
     let messageContent: string | null = null;
     let isAudioMessage = false;
+    let isImageMessage = false;
+    let isDocumentMessage = false;
+    let imageBase64: string | undefined;
 
+    // Check for image message
+    if (payload.data?.message?.imageMessage && imageEnabled) {
+      isImageMessage = true;
+      const imageMessage = payload.data.message.imageMessage;
+      const caption = imageMessage.caption || '';
+      
+      console.log(`Received image message from ${phoneNumber}, attempting to analyze...`);
+      
+      try {
+        const base64 = await downloadMedia(instanceName, payload.data.key.id);
+        
+        if (base64) {
+          imageBase64 = base64;
+          const imageAnalysis = await analyzeImage(agent, base64, caption || 'Descreva esta imagem detalhadamente.');
+          messageContent = caption ? `[Imagem com legenda: "${caption}"]\n\nAnálise da imagem: ${imageAnalysis}` : `[Imagem recebida]\n\nAnálise: ${imageAnalysis}`;
+          console.log(`Image analyzed successfully`);
+        } else {
+          messageContent = caption || '[Imagem recebida - não foi possível processar]';
+        }
+      } catch (err) {
+        console.error('Image analysis error:', err);
+        messageContent = caption || '[Imagem recebida - erro no processamento]';
+      }
+    }
+    // Check for document message
+    else if (payload.data?.message?.documentMessage && documentEnabled) {
+      isDocumentMessage = true;
+      const docMessage = payload.data.message.documentMessage;
+      const fileName = docMessage.fileName || docMessage.title || 'documento';
+      const mimeType = docMessage.mimetype || '';
+      
+      console.log(`Received document from ${phoneNumber}: ${fileName} (${mimeType})`);
+      
+      try {
+        const base64 = await downloadMedia(instanceName, payload.data.key.id);
+        
+        if (base64 && (mimeType.includes('image') || mimeType.includes('pdf'))) {
+          if (mimeType.includes('image')) {
+            const imageAnalysis = await analyzeImage(agent, base64, `Analise este documento/imagem: ${fileName}`);
+            messageContent = `[Documento: ${fileName}]\n\nConteúdo: ${imageAnalysis}`;
+          } else {
+            // For PDFs and other documents, try to analyze as image (first page)
+            messageContent = `[Documento PDF recebido: ${fileName}]\n\nNota: Recebi seu documento. Como posso ajudá-lo com ele?`;
+          }
+        } else {
+          messageContent = `[Documento recebido: ${fileName}]`;
+        }
+      } catch (err) {
+        console.error('Document processing error:', err);
+        messageContent = `[Documento recebido: ${fileName} - erro no processamento]`;
+      }
+    }
     // Check for audio message
-    if (payload.data?.message?.audioMessage && audioEnabled) {
+    else if (payload.data?.message?.audioMessage && audioEnabled) {
       isAudioMessage = true;
       const audioMessage = payload.data.message.audioMessage;
       
       console.log(`Received audio message from ${phoneNumber}, attempting to transcribe...`);
       
       try {
-        // Download the audio
-        const audioBuffer = await downloadAudio(instanceName, payload.data.key.id);
+        const base64 = await downloadMedia(instanceName, payload.data.key.id);
         
-        if (audioBuffer) {
-          // Transcribe using Whisper
-          messageContent = await transcribeAudio(audioBuffer, audioMessage.mimetype || 'audio/ogg');
+        if (base64) {
+          const audioBuffer = Buffer.from(base64, 'base64');
+          messageContent = await transcribeAudio(agent, audioBuffer, audioMessage.mimetype || 'audio/ogg');
           console.log(`Transcribed audio: "${messageContent}"`);
         } else {
           console.log('Could not download audio');

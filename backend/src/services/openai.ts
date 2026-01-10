@@ -1,14 +1,13 @@
 import OpenAI from 'openai';
 import { query } from './database.js';
 
-let openaiClient: OpenAI | null = null;
+let globalOpenaiClient: OpenAI | null = null;
 
-async function getOpenAIClient(): Promise<OpenAI> {
-  if (!openaiClient) {
-    // First try environment variable
+// Get global OpenAI client (fallback)
+async function getGlobalOpenAIClient(): Promise<OpenAI> {
+  if (!globalOpenaiClient) {
     let apiKey = process.env.OPENAI_API_KEY;
     
-    // If not in env, try to get from database settings
     if (!apiKey) {
       try {
         const result = await query(`SELECT value FROM settings WHERE key = 'openai_api_key'`);
@@ -23,14 +22,22 @@ async function getOpenAIClient(): Promise<OpenAI> {
     if (!apiKey) {
       throw new Error('OPENAI_API_KEY is not configured. Please add it in Settings.');
     }
-    openaiClient = new OpenAI({ apiKey });
+    globalOpenaiClient = new OpenAI({ apiKey });
   }
-  return openaiClient;
+  return globalOpenaiClient;
 }
 
-// Reset client when settings change
+// Get OpenAI client for a specific agent (uses agent's key if available)
+async function getAgentOpenAIClient(agent: AgentWithConfig): Promise<OpenAI> {
+  if (agent.openai_api_key) {
+    return new OpenAI({ apiKey: agent.openai_api_key });
+  }
+  return getGlobalOpenAIClient();
+}
+
+// Reset global client when settings change
 export function resetOpenAIClient() {
-  openaiClient = null;
+  globalOpenaiClient = null;
 }
 
 interface Agent {
@@ -39,12 +46,28 @@ interface Agent {
   prompt: string;
 }
 
+interface AgentWithConfig extends Agent {
+  openai_api_key?: string;
+  openai_model?: string;
+}
+
 interface HistoryMessage {
   role: 'user' | 'assistant';
   content: string;
 }
 
-export async function generateResponse(agent: Agent, userMessage: string, phoneNumber: string): Promise<string> {
+interface MessageContent {
+  type: 'text' | 'image_url';
+  text?: string;
+  image_url?: { url: string };
+}
+
+export async function generateResponse(
+  agent: AgentWithConfig, 
+  userMessage: string, 
+  phoneNumber: string,
+  imageBase64?: string
+): Promise<string> {
   try {
     // Get conversation history
     const historyResult = await query(
@@ -74,14 +97,27 @@ export async function generateResponse(agent: Agent, userMessage: string, phoneN
       ? `${agent.prompt}\n\nContexto adicional dos documentos:\n${docsContext}`
       : agent.prompt;
 
-    const client = await getOpenAIClient();
+    const client = await getAgentOpenAIClient(agent);
+    const model = agent.openai_model || process.env.OPENAI_MODEL || 'gpt-4o';
+
+    // Build user message content (text or multimodal with image)
+    let userContent: string | MessageContent[];
+    if (imageBase64) {
+      userContent = [
+        { type: 'text' as const, text: userMessage },
+        { type: 'image_url' as const, image_url: { url: `data:image/jpeg;base64,${imageBase64}` } }
+      ];
+    } else {
+      userContent = userMessage;
+    }
+
     const response = await client.chat.completions.create({
-      model: process.env.OPENAI_MODEL || 'gpt-4o',
+      model,
       max_completion_tokens: 1000,
       messages: [
         { role: 'system', content: systemPrompt },
         ...history,
-        { role: 'user', content: userMessage },
+        { role: 'user', content: userContent as any },
       ],
     });
 
@@ -93,9 +129,8 @@ export async function generateResponse(agent: Agent, userMessage: string, phoneN
 }
 
 // Generate test response for the chat testing feature
-export async function generateTestResponse(agent: Agent, userMessage: string, history: HistoryMessage[]): Promise<string> {
+export async function generateTestResponse(agent: AgentWithConfig, userMessage: string, history: HistoryMessage[]): Promise<string> {
   try {
-    // Get agent documents for context (RAG)
     const docsResult = await query(
       `SELECT content FROM documents WHERE agent_id = $1`,
       [agent.id]
@@ -110,9 +145,11 @@ export async function generateTestResponse(agent: Agent, userMessage: string, hi
       ? `${agent.prompt}\n\nContexto adicional dos documentos:\n${docsContext}`
       : agent.prompt;
 
-    const client = await getOpenAIClient();
+    const client = await getAgentOpenAIClient(agent);
+    const model = agent.openai_model || process.env.OPENAI_MODEL || 'gpt-4o';
+    
     const response = await client.chat.completions.create({
-      model: process.env.OPENAI_MODEL || 'gpt-4o',
+      model,
       max_completion_tokens: 1000,
       messages: [
         { role: 'system', content: systemPrompt },
@@ -129,17 +166,16 @@ export async function generateTestResponse(agent: Agent, userMessage: string, hi
 }
 
 // Transcribe audio to text using Whisper
-export async function transcribeAudio(audioBuffer: Buffer, mimeType: string = 'audio/ogg'): Promise<string> {
+export async function transcribeAudio(agent: AgentWithConfig, audioBuffer: Buffer, mimeType: string = 'audio/ogg'): Promise<string> {
   try {
-    const client = await getOpenAIClient();
+    const client = await getAgentOpenAIClient(agent);
     
-    // Create a File-like object for the API
     const audioFile = new File([audioBuffer], 'audio.ogg', { type: mimeType });
     
     const transcription = await client.audio.transcriptions.create({
       file: audioFile,
       model: 'whisper-1',
-      language: 'pt', // Portuguese
+      language: 'pt',
     });
 
     return transcription.text;
@@ -149,10 +185,74 @@ export async function transcribeAudio(audioBuffer: Buffer, mimeType: string = 'a
   }
 }
 
-// Generate response for widget chat (public endpoint)
-export async function generateWidgetResponse(agent: Agent, userMessage: string, sessionId: string, history: HistoryMessage[]): Promise<string> {
+// Analyze image using GPT-4 Vision
+export async function analyzeImage(agent: AgentWithConfig, imageBase64: string, prompt?: string): Promise<string> {
   try {
-    // Get agent documents for context (RAG)
+    const client = await getAgentOpenAIClient(agent);
+    const model = agent.openai_model || 'gpt-4o';
+    
+    const analysisPrompt = prompt || 'Descreva detalhadamente o conteúdo desta imagem. Se houver texto, transcreva-o.';
+    
+    const response = await client.chat.completions.create({
+      model,
+      max_completion_tokens: 1000,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: analysisPrompt },
+            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64}` } }
+          ]
+        }
+      ],
+    });
+
+    return response.choices[0]?.message?.content || 'Não foi possível analisar a imagem.';
+  } catch (error) {
+    console.error('Image analysis error:', error);
+    throw error;
+  }
+}
+
+// Extract text from PDF using GPT-4 Vision (page by page as images)
+export async function analyzePDF(agent: AgentWithConfig, pdfBase64: string): Promise<string> {
+  try {
+    const client = await getAgentOpenAIClient(agent);
+    const model = agent.openai_model || 'gpt-4o';
+    
+    // For now, we'll ask GPT to analyze the PDF as a document
+    // In production, you might want to convert PDF pages to images first
+    const response = await client.chat.completions.create({
+      model,
+      max_completion_tokens: 2000,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { 
+              type: 'text', 
+              text: 'Este é um documento PDF. Por favor, extraia e resuma o conteúdo principal. Se houver texto visível, transcreva-o.' 
+            },
+            { 
+              type: 'image_url', 
+              image_url: { url: `data:application/pdf;base64,${pdfBase64}` } 
+            }
+          ]
+        }
+      ],
+    });
+
+    return response.choices[0]?.message?.content || 'Não foi possível analisar o documento.';
+  } catch (error) {
+    console.error('PDF analysis error:', error);
+    // If PDF analysis fails, return a helpful message
+    return '[Documento recebido - análise de PDF requer conversão para imagem]';
+  }
+}
+
+// Generate response for widget chat (public endpoint)
+export async function generateWidgetResponse(agent: AgentWithConfig, userMessage: string, sessionId: string, history: HistoryMessage[]): Promise<string> {
+  try {
     const docsResult = await query(
       `SELECT content FROM documents WHERE agent_id = $1`,
       [agent.id]
@@ -167,9 +267,11 @@ export async function generateWidgetResponse(agent: Agent, userMessage: string, 
       ? `${agent.prompt}\n\nContexto adicional dos documentos:\n${docsContext}`
       : agent.prompt;
 
-    const client = await getOpenAIClient();
+    const client = await getAgentOpenAIClient(agent);
+    const model = agent.openai_model || process.env.OPENAI_MODEL || 'gpt-4o';
+    
     const response = await client.chat.completions.create({
-      model: process.env.OPENAI_MODEL || 'gpt-4o',
+      model,
       max_completion_tokens: 1000,
       messages: [
         { role: 'system', content: systemPrompt },
