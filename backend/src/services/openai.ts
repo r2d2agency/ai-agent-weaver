@@ -223,6 +223,8 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
 
     // Check for tool calls
     if (message?.tool_calls && message.tool_calls.length > 0) {
+      let toolSuggestedMessage: string | null = null;
+
       for (const toolCall of message.tool_calls) {
         if (toolCall.function.name === 'send_media') {
           try {
@@ -230,13 +232,16 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
             const mediaNames: string[] = args.media_names || [];
             const additionalMessage: string = args.message || '';
 
+            if (additionalMessage) toolSuggestedMessage = additionalMessage;
+
             console.log(`Tool call send_media with names: ${mediaNames.join(', ')}`);
 
             // Find matching media items (more flexible matching)
             for (const name of mediaNames) {
               const found = mediaItems.find(
-                m => m.name.toLowerCase().includes(String(name).toLowerCase()) ||
-                     String(name).toLowerCase().includes(m.name.toLowerCase())
+                m =>
+                  m.name.toLowerCase().includes(String(name).toLowerCase()) ||
+                  String(name).toLowerCase().includes(m.name.toLowerCase())
               );
               if (found) {
                 mediaToSend.push(found);
@@ -245,22 +250,19 @@ IMPORTANTE: Responda de forma natural e humana. Quebre suas respostas em mensage
                 console.log(`Media not found: ${name}`);
               }
             }
-
-            if (additionalMessage) textResponse = additionalMessage;
           } catch (e) {
             console.error('Error parsing tool call:', e);
           }
         }
       }
 
-      // Always have a text response when tools are used
-      if (mediaToSend.length > 0 && !textResponse) {
-        textResponse = 'Perfeito — vou te enviar agora.';
-      }
-
-      // Tool was called but nothing matched: never attempt an extra tool-followup completion here (can break and freeze)
-      if (mediaToSend.length === 0 && !textResponse) {
-        textResponse = 'Entendi. Não encontrei esse item na minha galeria agora. Você pode me dizer o nome do produto ou mandar mais detalhes/foto?';
+      // If tool is used, avoid confirming delivery in the past tense.
+      if (mediaToSend.length > 0) {
+        textResponse = toolSuggestedMessage || 'Perfeito — vou te enviar agora.';
+      } else {
+        textResponse =
+          toolSuggestedMessage ||
+          'Entendi. Não encontrei esse item na minha galeria agora. Você pode me dizer o nome do produto ou mandar mais detalhes/foto?';
       }
     }
 

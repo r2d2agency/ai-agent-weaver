@@ -271,50 +271,72 @@ async function processAndRespond(
     // Send media items if any
     if (mediaToSend && mediaToSend.length > 0) {
       console.log(`Sending ${mediaToSend.length} media items to ${phoneNumber}`);
-      
+
+      let mediaSentCount = 0;
+      let mediaErrorCount = 0;
+
       for (const media of mediaToSend) {
         try {
           console.log(`Processing media: ${media.name}, type: ${media.type}, urls count: ${media.file_urls?.length || 0}`);
-          
+
           // Small delay between media
           await new Promise(resolve => setTimeout(resolve, 800));
-          
+
           if (!media.file_urls || media.file_urls.length === 0) {
             console.error(`No file URLs for media: ${media.name}`);
+            mediaErrorCount++;
             continue;
           }
-          
+
           for (let i = 0; i < media.file_urls.length; i++) {
             const fileUrl = media.file_urls[i];
             const mimeType = media.mime_types?.[i] || 'image/jpeg';
-            
+
             console.log(`Sending file ${i + 1}/${media.file_urls.length}, mimeType: ${mimeType}, url length: ${fileUrl?.length || 0}`);
-            
+
             if (!fileUrl) {
               console.error(`Empty file URL at index ${i}`);
+              mediaErrorCount++;
               continue;
             }
-            
+
             // Extract base64 from data URL
             const base64Match = fileUrl.match(/^data:[^;]+;base64,(.+)$/);
             if (base64Match) {
               const base64 = base64Match[1];
               const caption = i === 0 ? media.name : undefined;
-              
+
               console.log(`Sending base64 media, length: ${base64.length}, caption: ${caption}`);
               await sendMedia(instanceName, phoneNumber, base64, mimeType, caption, agent);
+              mediaSentCount++;
               console.log(`Media sent successfully: ${media.name}`);
-              
+
               // Small delay between gallery items
               if (i < media.file_urls.length - 1) {
                 await new Promise(resolve => setTimeout(resolve, 500));
               }
             } else {
               console.error(`File URL is not a valid data URL: ${fileUrl.substring(0, 50)}...`);
+              mediaErrorCount++;
             }
           }
         } catch (mediaError) {
+          mediaErrorCount++;
           console.error(`Error sending media ${media.name}:`, mediaError);
+        }
+      }
+
+      // If the AI promised media but we couldn't send anything, notify the user.
+      if (mediaErrorCount > 0 && mediaSentCount === 0) {
+        try {
+          await sendMessage(
+            instanceName,
+            phoneNumber,
+            'Tive um problema ao enviar a imagem/vídeo agora. Pode tentar novamente ou me dizer qual produto você quer ver?',
+            agent
+          );
+        } catch (notifyErr) {
+          console.error('Failed to notify user about media failure:', notifyErr);
         }
       }
     }
