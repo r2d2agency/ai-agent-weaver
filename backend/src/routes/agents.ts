@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { query } from '../services/database.js';
 import { v4 as uuidv4 } from 'uuid';
+import { generateTestResponse } from '../services/openai.js';
 
 export const agentsRouter = Router();
 
@@ -106,6 +107,37 @@ agentsRouter.patch('/:id/toggle', async (req, res) => {
   } catch (error) {
     console.error('Error toggling agent:', error);
     res.status(500).json({ error: 'Failed to toggle agent' });
+  }
+});
+
+// Test agent with a message
+agentsRouter.post('/:id/test', async (req, res) => {
+  try {
+    const { message, history } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+    
+    // Get the agent
+    const agentResult = await query(
+      `SELECT * FROM agents WHERE id = $1`,
+      [req.params.id]
+    );
+    
+    if (agentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+    
+    const agent = agentResult.rows[0];
+    
+    // Generate response using OpenAI
+    const response = await generateTestResponse(agent, message, history || []);
+    
+    res.json({ response });
+  } catch (error) {
+    console.error('Error testing agent:', error);
+    res.status(500).json({ error: 'Failed to test agent: ' + (error instanceof Error ? error.message : 'Unknown error') });
   }
 });
 
