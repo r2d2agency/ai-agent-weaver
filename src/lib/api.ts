@@ -92,6 +92,9 @@ export const updateAgent = (id: string, data: Partial<{
   widgetTextColor: string;
   audioResponseEnabled: boolean;
   audioResponseVoice: string;
+  notificationNumber: string;
+  transferInstructions: string;
+  requiredFields: { key: string; question: string }[];
 }>) => apiRequest<any>(`/api/agents/${id}`, {
   method: 'PUT',
   body: JSON.stringify(data),

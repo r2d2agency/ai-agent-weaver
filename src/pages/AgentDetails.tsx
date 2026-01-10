@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, Images, File, Key, Link2, Upload, Palette, Video, HelpCircle, Volume2, Play, Square, Bell, Phone } from 'lucide-react';
+import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, Images, File, Key, Link2, Upload, Palette, Video, HelpCircle, Volume2, Play, Square, Bell, Phone, ClipboardList } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import { AgentDocumentsModal } from '@/components/agents/AgentDocumentsModal';
 import { AgentMediaModal } from '@/components/agents/AgentMediaModal';
 import { AgentConversationsModal } from '@/components/agents/AgentConversationsModal';
 import { AgentFaqModal } from '@/components/agents/AgentFaqModal';
+import { RequiredFieldsManager, RequiredField } from '@/components/agents/RequiredFieldsManager';
 
 const AgentDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -62,6 +63,7 @@ const AgentDetailsPage = () => {
     audioResponseVoice: 'nova',
     notificationNumber: '',
     transferInstructions: '',
+    requiredFields: [] as RequiredField[],
   });
 
   const [testingEvolution, setTestingEvolution] = useState(false);
@@ -119,6 +121,7 @@ const AgentDetailsPage = () => {
         audioResponseVoice: agentData.audio_response_voice || 'nova',
         notificationNumber: agentData.notification_number || '',
         transferInstructions: agentData.transfer_instructions || '',
+        requiredFields: agentData.required_fields || [],
       });
     }
   }, [agentData]);
@@ -303,6 +306,15 @@ const AgentDetailsPage = () => {
     updateAgentMutation.mutate({
       id,
       data: { transferInstructions: formData.transferInstructions || null } as any,
+    });
+  };
+
+  const handleRequiredFieldsChange = (fields: RequiredField[]) => {
+    if (!id) return;
+    setFormData(prev => ({ ...prev, requiredFields: fields }));
+    updateAgentMutation.mutate({
+      id,
+      data: { requiredFields: fields } as any,
     });
   };
 
@@ -892,6 +904,23 @@ const AgentDetailsPage = () => {
                     Defina quais informações a IA deve coletar e enviar ao atendente humano. 
                     Seja específico sobre os dados importantes para seu negócio.
                   </p>
+                </div>
+              )}
+
+              {formData.notificationNumber && (
+                <div className="space-y-3 pt-4 border-t border-border">
+                  <div className="flex items-center gap-2">
+                    <ClipboardList className="w-4 h-4 text-primary" />
+                    <Label className="text-sm font-medium">Variáveis Obrigatórias</Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Configure quais informações a IA deve coletar obrigatoriamente antes de transferir.
+                    Se alguma estiver faltando, a IA perguntará ao cliente antes de transferir.
+                  </p>
+                  <RequiredFieldsManager
+                    fields={formData.requiredFields}
+                    onChange={handleRequiredFieldsChange}
+                  />
                 </div>
               )}
             </div>

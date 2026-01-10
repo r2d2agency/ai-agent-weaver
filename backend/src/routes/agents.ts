@@ -67,7 +67,7 @@ agentsRouter.put('/:id', async (req, res) => {
       operatingHoursEnabled, operatingHoursStart, operatingHoursEnd, operatingHoursTimezone, outOfHoursMessage,
       evolutionApiUrl, evolutionApiKey, openaiApiKey, openaiModel,
       widgetAvatarUrl, widgetPosition, widgetTitle, widgetPrimaryColor, widgetSecondaryColor, widgetBackgroundColor, widgetTextColor,
-      audioResponseEnabled, audioResponseVoice, notificationNumber, transferInstructions
+      audioResponseEnabled, audioResponseVoice, notificationNumber, transferInstructions, requiredFields
     } = req.body;
     
     // Helper to convert undefined to null for proper COALESCE behavior
@@ -111,8 +111,9 @@ agentsRouter.put('/:id', async (req, res) => {
            audio_response_voice = COALESCE($34, audio_response_voice),
            notification_number = COALESCE($35, notification_number),
            transfer_instructions = COALESCE($36, transfer_instructions),
+           required_fields = COALESCE($37, required_fields),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $37
+       WHERE id = $38
        RETURNING *`,
       [
         toNull(name), toNull(description), toNull(prompt), toNull(instanceName), 
@@ -126,7 +127,7 @@ agentsRouter.put('/:id', async (req, res) => {
         toNull(widgetPosition), toNull(widgetTitle), toNull(widgetPrimaryColor), 
         toNull(widgetSecondaryColor), toNull(widgetBackgroundColor), toNull(widgetTextColor),
         toNull(audioResponseEnabled), toNull(audioResponseVoice), toNull(notificationNumber),
-        toNull(transferInstructions),
+        toNull(transferInstructions), requiredFields ? JSON.stringify(requiredFields) : null,
         req.params.id
       ]
     );
