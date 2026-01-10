@@ -7,6 +7,8 @@ import { messagesRouter } from './routes/messages.js';
 import { settingsRouter } from './routes/settings.js';
 import { authRouter } from './routes/auth.js';
 import { widgetRouter } from './routes/widget.js';
+import { documentsRouter } from './routes/documents.js';
+import { conversationsRouter } from './routes/conversations.js';
 import { initDatabase } from './services/database.js';
 
 dotenv.config();
@@ -16,7 +18,7 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // Health check
 app.get('/health', (req, res) => {
@@ -30,6 +32,8 @@ app.use('/api/messages', messagesRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/widget', widgetRouter);
+app.use('/api/documents', documentsRouter);
+app.use('/api/conversations', conversationsRouter);
 
 // Initialize database and start server
 async function start() {

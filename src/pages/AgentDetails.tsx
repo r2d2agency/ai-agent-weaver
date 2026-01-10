@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,8 @@ import { useAgent, useUpdateAgent, useDeleteAgent } from '@/hooks/use-agents';
 import { useToast } from '@/hooks/use-toast';
 import { API_BASE_URL } from '@/lib/api';
 import { TestAgentModal } from '@/components/agents/TestAgentModal';
+import { AgentDocumentsModal } from '@/components/agents/AgentDocumentsModal';
+import { AgentConversationsModal } from '@/components/agents/AgentConversationsModal';
 
 const AgentDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -37,6 +39,8 @@ const AgentDetailsPage = () => {
   const [testingInstance, setTestingInstance] = useState(false);
   const [instanceStatus, setInstanceStatus] = useState<'idle' | 'connected' | 'disconnected' | 'error'>('idle');
   const [testAgentModalOpen, setTestAgentModalOpen] = useState(false);
+  const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
+  const [conversationsModalOpen, setConversationsModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -370,6 +374,54 @@ const AgentDetailsPage = () => {
             </Button>
           </motion.div>
 
+          {/* Documents Card - RAG */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.16 }}
+            className="glass-card p-6"
+          >
+            <h3 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+              <FileText className="w-4 h-4 text-primary" />
+              Base de Conhecimento
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Documentos que o agente usa para responder (RAG).
+            </p>
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={() => setDocumentsModalOpen(true)}
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Gerenciar Documentos
+            </Button>
+          </motion.div>
+
+          {/* Conversations Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.165 }}
+            className="glass-card p-6"
+          >
+            <h3 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+              <History className="w-4 h-4 text-primary" />
+              Histórico de Conversas
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Visualize todas as conversas deste agente.
+            </p>
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={() => setConversationsModalOpen(true)}
+            >
+              <MessageSquare className="w-4 h-4 mr-2" />
+              Ver Conversas
+            </Button>
+          </motion.div>
+
           {/* Audio Processing Card */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -475,6 +527,18 @@ const AgentDetailsPage = () => {
         open={testAgentModalOpen}
         onOpenChange={setTestAgentModalOpen}
         agent={agentData ? { id: agentData.id, name: agentData.name, prompt: agentData.prompt } : null}
+      />
+
+      <AgentDocumentsModal
+        open={documentsModalOpen}
+        onOpenChange={setDocumentsModalOpen}
+        agent={agentData ? { id: agentData.id, name: agentData.name } : null}
+      />
+
+      <AgentConversationsModal
+        open={conversationsModalOpen}
+        onOpenChange={setConversationsModalOpen}
+        agent={agentData ? { id: agentData.id, name: agentData.name } : null}
       />
     </MainLayout>
   );

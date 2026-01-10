@@ -84,6 +84,17 @@ export async function initDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
 
+      -- Contacts table for storing user information
+      CREATE TABLE IF NOT EXISTS contacts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        phone_number VARCHAR(50) UNIQUE NOT NULL,
+        name VARCHAR(255),
+        notes TEXT,
+        tags TEXT[],
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
       -- Add new columns if they don't exist (for existing databases)
       DO $$ 
       BEGIN 
