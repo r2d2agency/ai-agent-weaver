@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { query } from '../services/database.js';
 import { generateResponse, transcribeAudio, analyzeImage, textToSpeech } from '../services/openai.js';
-import { sendMessage, sendMessagesWithDelay, sendMedia, sendAudio, downloadMediaForAgent } from '../services/evolution.js';
+import { sendMessage, sendMessagesWithDelay, sendMedia, sendAudio, sendPresence, downloadMediaForAgent } from '../services/evolution.js';
 import { createLog } from './logs.js';
 
 export const webhookRouter = Router();
@@ -271,6 +271,9 @@ async function processAndRespond(
     const shouldRespondWithAudio = respondWithAudio && agent.audio_response_enabled === true;
     
     if (shouldRespondWithAudio) {
+      // Send "recording" presence before generating audio
+      await sendPresence(instanceName, phoneNumber, 'recording', agent, 3000);
+      
       // Generate TTS audio for the response
       try {
         console.log(`Generating audio response for ${phoneNumber}`);
@@ -316,6 +319,9 @@ async function processAndRespond(
         await sendMessagesWithDelay(instanceName, phoneNumber, messageParts, agent, 1500);
       }
     } else {
+      // Send "composing" presence before sending text
+      await sendPresence(instanceName, phoneNumber, 'composing', agent, 2000);
+      
       // Send text messages with delay for natural feel
       await sendMessagesWithDelay(instanceName, phoneNumber, messageParts, agent, 1500);
     }
