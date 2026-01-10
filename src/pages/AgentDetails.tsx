@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useAgent, useUpdateAgent, useDeleteAgent } from '@/hooks/use-agents';
 import { useToast } from '@/hooks/use-toast';
+import { API_BASE_URL } from '@/lib/api';
+import { TestAgentModal } from '@/components/agents/TestAgentModal';
 
 const AgentDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -28,6 +30,10 @@ const AgentDetailsPage = () => {
     webhookUrl: '',
     token: '',
   });
+
+  const [testingInstance, setTestingInstance] = useState(false);
+  const [instanceStatus, setInstanceStatus] = useState<'idle' | 'connected' | 'disconnected' | 'error'>('idle');
+  const [testAgentModalOpen, setTestAgentModalOpen] = useState(false);
 
   useEffect(() => {
     if (agentData) {
@@ -70,6 +76,70 @@ const AgentDetailsPage = () => {
     deleteAgentMutation.mutate(id, {
       onSuccess: () => navigate('/agents'),
     });
+  };
+
+  const handleTestInstance = async () => {
+    if (!formData.instanceName) {
+      toast({
+        title: 'Nome da instância necessário',
+        description: 'Informe o nome da instância para testar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setTestingInstance(true);
+    setInstanceStatus('idle');
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/settings/test-instance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceName: formData.instanceName }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        if (data.connected) {
+          setInstanceStatus('connected');
+          toast({
+            title: 'Instância conectada!',
+            description: `A instância "${formData.instanceName}" está online e pronta.`,
+          });
+        } else {
+          setInstanceStatus('disconnected');
+          toast({
+            title: 'Instância desconectada',
+            description: `A instância existe mas não está conectada ao WhatsApp. Estado: ${data.state}`,
+            variant: 'destructive',
+          });
+        }
+      } else {
+        setInstanceStatus('error');
+        toast({
+          title: 'Erro ao testar instância',
+          description: data.error || 'Verifique as configurações da Evolution API.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      setInstanceStatus('error');
+      toast({
+        title: 'Erro de conexão',
+        description: 'Não foi possível conectar à Evolution API.',
+        variant: 'destructive',
+      });
+    } finally {
+      setTestingInstance(false);
+    }
+  };
+
+  const getInstanceStatusIcon = () => {
+    if (instanceStatus === 'connected') return <CheckCircle className="w-4 h-4 text-success" />;
+    if (instanceStatus === 'disconnected') return <WifiOff className="w-4 h-4 text-warning" />;
+    if (instanceStatus === 'error') return <XCircle className="w-4 h-4 text-destructive" />;
+    return null;
   };
 
   if (isLoading) {
@@ -135,13 +205,31 @@ const AgentDetailsPage = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="instanceName">Nome da Instância</Label>
-                  <Input
-                    id="instanceName"
-                    value={formData.instanceName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, instanceName: e.target.value }))}
-                    className="bg-muted border-border"
-                  />
+                  <Label htmlFor="instanceName" className="flex items-center gap-2">
+                    Nome da Instância
+                    {getInstanceStatusIcon()}
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="instanceName"
+                      value={formData.instanceName}
+                      onChange={(e) => setFormData(prev => ({ ...prev, instanceName: e.target.value }))}
+                      className="bg-muted border-border"
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={handleTestInstance}
+                      disabled={testingInstance}
+                      title="Testar conexão da instância"
+                    >
+                      {testingInstance ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Wifi className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
 
@@ -226,6 +314,27 @@ const AgentDetailsPage = () => {
             </Button>
           </motion.div>
 
+          {/* Test Agent Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="glass-card p-6"
+          >
+            <h3 className="font-semibold text-foreground mb-4">Testar Agente</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Simule uma conversa com este agente usando a IA configurada.
+            </p>
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={() => setTestAgentModalOpen(true)}
+            >
+              <TestTube className="w-4 h-4 mr-2" />
+              Abrir Chat de Teste
+            </Button>
+          </motion.div>
+
           {/* Stats Card */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -263,6 +372,12 @@ const AgentDetailsPage = () => {
           </motion.div>
         </div>
       </div>
+
+      <TestAgentModal
+        open={testAgentModalOpen}
+        onOpenChange={setTestAgentModalOpen}
+        agent={agentData ? { id: agentData.id, name: agentData.name, prompt: agentData.prompt } : null}
+      />
     </MainLayout>
   );
 };
