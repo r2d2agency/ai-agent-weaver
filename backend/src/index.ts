@@ -13,6 +13,7 @@ import { mediaRouter } from './routes/media.js';
 import { faqRouter } from './routes/faq.js';
 import { logsRouter } from './routes/logs.js';
 import { productsRouter } from './routes/products.js';
+import { calendarRouter } from './routes/calendar.js';
 import { initDatabase } from './services/database.js';
 import { startInactivityChecker } from './services/inactivity.js';
 
@@ -43,6 +44,7 @@ app.use('/api/media', mediaRouter);
 app.use('/api/faq', faqRouter);
 app.use('/api/logs', logsRouter);
 app.use('/api/products', productsRouter);
+app.use('/api/calendar', calendarRouter);
 
 // Initialize database and start server
 async function start() {

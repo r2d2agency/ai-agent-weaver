@@ -296,7 +296,22 @@ export async function initDatabase() {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='is_from_owner') THEN
           ALTER TABLE messages ADD COLUMN is_from_owner BOOLEAN DEFAULT false;
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='agents' AND column_name='calendar_enabled') THEN
+          ALTER TABLE agents ADD COLUMN calendar_enabled BOOLEAN DEFAULT false;
+        END IF;
       END $$;
+
+      -- Create table for storing Google Calendar OAuth tokens per agent
+      CREATE TABLE IF NOT EXISTS agent_calendar_tokens (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          agent_id UUID REFERENCES agents(id) ON DELETE CASCADE UNIQUE NOT NULL,
+          access_token TEXT NOT NULL,
+          refresh_token TEXT,
+          expires_at TIMESTAMP NOT NULL,
+          google_email VARCHAR(255),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
     `);
 
     // Create default admin user if not exists
