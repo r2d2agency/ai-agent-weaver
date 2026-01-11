@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, Images, File, Key, Link2, Upload, Palette, Video, HelpCircle, Volume2, Play, Square, Bell, Phone, ClipboardList, Package } from 'lucide-react';
+import { ArrowLeft, Bot, Save, Power, Trash2, Loader2, MessageSquare, Wifi, WifiOff, CheckCircle, XCircle, TestTube, Mic, Globe, Copy, Check, FileText, History, Ghost, UserCheck, Clock, Timer, CalendarClock, Image, Images, File, Key, Link2, Upload, Palette, Video, HelpCircle, Volume2, Play, Square, Bell, Phone, ClipboardList, Package, Calendar } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useAgent, useUpdateAgent, useDeleteAgent } from '@/hooks/use-agents';
 import { useToast } from '@/hooks/use-toast';
-import { API_BASE_URL, testAgentEvolution, previewVoice } from '@/lib/api';
+import { API_BASE_URL, testAgentEvolution, previewVoice, getCalendarStatus, getCalendarAuthUrl, disconnectCalendar, CalendarStatus } from '@/lib/api';
 import { TestAgentModal } from '@/components/agents/TestAgentModal';
 import { AgentDocumentsModal } from '@/components/agents/AgentDocumentsModal';
 import { AgentMediaModal } from '@/components/agents/AgentMediaModal';
@@ -82,6 +82,42 @@ const AgentDetailsPage = () => {
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const [loadingVoice, setLoadingVoice] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [calendarStatus, setCalendarStatus] = useState<CalendarStatus | null>(null);
+  const [loadingCalendar, setLoadingCalendar] = useState(false);
+
+  // Fetch calendar status
+  useEffect(() => {
+    if (id) {
+      getCalendarStatus(id).then(setCalendarStatus).catch(() => setCalendarStatus({ connected: false }));
+    }
+  }, [id]);
+
+  const handleConnectCalendar = async () => {
+    if (!id) return;
+    setLoadingCalendar(true);
+    try {
+      const { authUrl } = await getCalendarAuthUrl(id);
+      window.location.href = authUrl;
+    } catch (error) {
+      toast({ title: 'Erro', description: 'Não foi possível conectar ao Google Calendar', variant: 'destructive' });
+    } finally {
+      setLoadingCalendar(false);
+    }
+  };
+
+  const handleDisconnectCalendar = async () => {
+    if (!id) return;
+    setLoadingCalendar(true);
+    try {
+      await disconnectCalendar(id);
+      setCalendarStatus({ connected: false });
+      toast({ title: 'Desconectado', description: 'Google Calendar desconectado com sucesso' });
+    } catch (error) {
+      toast({ title: 'Erro', description: 'Erro ao desconectar', variant: 'destructive' });
+    } finally {
+      setLoadingCalendar(false);
+    }
+  };
 
   // Auto-generate webhook URL based on instance name
   const generatedWebhookUrl = formData.instanceName 
@@ -831,6 +867,49 @@ const AgentDetailsPage = () => {
               <Package className="w-4 h-4 mr-2" />
               Gerenciar Produtos
             </Button>
+          </motion.div>
+
+          {/* Google Calendar Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.166 }}
+            className="glass-card p-6"
+          >
+            <h3 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-primary" />
+              Google Calendar
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Conecte ao Google Calendar para agendar, consultar e gerenciar compromissos via IA.
+            </p>
+            {calendarStatus?.connected ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-success">
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Conectado: {calendarStatus.email}</span>
+                </div>
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={handleDisconnectCalendar}
+                  disabled={loadingCalendar}
+                >
+                  {loadingCalendar ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  Desconectar
+                </Button>
+              </div>
+            ) : (
+              <Button 
+                variant="outline" 
+                className="w-full"
+                onClick={handleConnectCalendar}
+                disabled={loadingCalendar}
+              >
+                {loadingCalendar ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Calendar className="w-4 h-4 mr-2" />}
+                Conectar Google Calendar
+              </Button>
+            )}
           </motion.div>
 
           {/* Ghost Mode Card */}

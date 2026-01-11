@@ -275,3 +275,65 @@ export const bulkImportProducts = (agentId: string, products: Array<{
     body: JSON.stringify({ products }),
   }
 );
+
+// Calendar
+export interface CalendarStatus {
+  connected: boolean;
+  email?: string;
+  expiresAt?: string;
+  updatedAt?: string;
+}
+
+export interface CalendarEvent {
+  id: string;
+  summary: string;
+  description?: string;
+  start: { dateTime?: string; date?: string };
+  end: { dateTime?: string; date?: string };
+  htmlLink?: string;
+}
+
+export const getCalendarAuthUrl = (agentId: string) =>
+  apiRequest<{ authUrl: string }>(`/api/calendar/auth-url/${agentId}`);
+
+export const getCalendarStatus = (agentId: string) =>
+  apiRequest<CalendarStatus>(`/api/calendar/status/${agentId}`);
+
+export const disconnectCalendar = (agentId: string) =>
+  apiRequest<{ success: boolean }>(`/api/calendar/disconnect/${agentId}`, {
+    method: 'DELETE',
+  });
+
+export const getCalendarEvents = (agentId: string, options?: { timeMin?: string; timeMax?: string; maxResults?: number }) => {
+  const params = new URLSearchParams();
+  if (options?.timeMin) params.append('timeMin', options.timeMin);
+  if (options?.timeMax) params.append('timeMax', options.timeMax);
+  if (options?.maxResults) params.append('maxResults', options.maxResults.toString());
+  return apiRequest<CalendarEvent[]>(`/api/calendar/events/${agentId}?${params.toString()}`);
+};
+
+export const createCalendarEvent = (agentId: string, data: {
+  summary: string;
+  description?: string;
+  startDateTime: string;
+  endDateTime: string;
+  attendees?: string[];
+}) => apiRequest<CalendarEvent>(`/api/calendar/events/${agentId}`, {
+  method: 'POST',
+  body: JSON.stringify(data),
+});
+
+export const updateCalendarEvent = (agentId: string, eventId: string, data: Partial<{
+  summary: string;
+  description: string;
+  startDateTime: string;
+  endDateTime: string;
+}>) => apiRequest<CalendarEvent>(`/api/calendar/events/${agentId}/${eventId}`, {
+  method: 'PUT',
+  body: JSON.stringify(data),
+});
+
+export const deleteCalendarEvent = (agentId: string, eventId: string) =>
+  apiRequest<{ success: boolean }>(`/api/calendar/events/${agentId}/${eventId}`, {
+    method: 'DELETE',
+  });

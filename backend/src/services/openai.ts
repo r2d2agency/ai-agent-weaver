@@ -1,6 +1,14 @@
 import OpenAI from 'openai';
 import { query } from './database.js';
 import { createLog } from '../routes/logs.js';
+import { 
+  isCalendarEnabled, 
+  listCalendarEvents, 
+  createCalendarEvent, 
+  updateCalendarEvent, 
+  deleteCalendarEvent,
+  checkCalendarAvailability 
+} from './calendar.js';
 
 let globalOpenaiClient: OpenAI | null = null;
 
@@ -76,6 +84,7 @@ interface AgentWithConfig extends Agent {
   transfer_instructions?: string;
   instance_name?: string;
   required_fields?: { key: string; question: string }[];
+  calendar_enabled?: boolean;
 }
 
 interface HistoryMessage {
@@ -563,6 +572,137 @@ const collectInfoTool = {
   }
 };
 
+// Calendar Tools
+const listEventsTool = {
+  type: 'function' as const,
+  function: {
+    name: 'calendar_list_events',
+    description: 'Lista os compromissos/eventos do calendário. Use para verificar agenda, disponibilidade ou mostrar eventos próximos.',
+    parameters: {
+      type: 'object',
+      properties: {
+        days_ahead: {
+          type: 'number',
+          description: 'Quantos dias à frente buscar (padrão: 7)'
+        },
+        max_results: {
+          type: 'number',
+          description: 'Número máximo de eventos (padrão: 10)'
+        }
+      },
+      required: []
+    }
+  }
+};
+
+const createEventTool = {
+  type: 'function' as const,
+  function: {
+    name: 'calendar_create_event',
+    description: 'Cria um novo compromisso/evento no calendário. Use quando o cliente quiser agendar algo.',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          description: 'Título do evento (ex: "Reunião com João", "Consulta médica")'
+        },
+        date: {
+          type: 'string',
+          description: 'Data do evento no formato YYYY-MM-DD (ex: "2025-01-15")'
+        },
+        start_time: {
+          type: 'string',
+          description: 'Horário de início no formato HH:MM (ex: "14:00")'
+        },
+        end_time: {
+          type: 'string',
+          description: 'Horário de término no formato HH:MM (ex: "15:00")'
+        },
+        description: {
+          type: 'string',
+          description: 'Descrição ou notas adicionais (opcional)'
+        }
+      },
+      required: ['title', 'date', 'start_time', 'end_time']
+    }
+  }
+};
+
+const updateEventTool = {
+  type: 'function' as const,
+  function: {
+    name: 'calendar_update_event',
+    description: 'Atualiza/modifica um compromisso existente. Use quando o cliente quiser remarcar ou alterar detalhes de um evento.',
+    parameters: {
+      type: 'object',
+      properties: {
+        event_id: {
+          type: 'string',
+          description: 'ID do evento a ser atualizado (obtido de calendar_list_events)'
+        },
+        title: {
+          type: 'string',
+          description: 'Novo título (opcional)'
+        },
+        date: {
+          type: 'string',
+          description: 'Nova data no formato YYYY-MM-DD (opcional)'
+        },
+        start_time: {
+          type: 'string',
+          description: 'Novo horário de início HH:MM (opcional)'
+        },
+        end_time: {
+          type: 'string',
+          description: 'Novo horário de término HH:MM (opcional)'
+        },
+        description: {
+          type: 'string',
+          description: 'Nova descrição (opcional)'
+        }
+      },
+      required: ['event_id']
+    }
+  }
+};
+
+const deleteEventTool = {
+  type: 'function' as const,
+  function: {
+    name: 'calendar_delete_event',
+    description: 'Exclui/cancela um compromisso do calendário. Use quando o cliente quiser cancelar um evento.',
+    parameters: {
+      type: 'object',
+      properties: {
+        event_id: {
+          type: 'string',
+          description: 'ID do evento a ser excluído (obtido de calendar_list_events)'
+        }
+      },
+      required: ['event_id']
+    }
+  }
+};
+
+const checkAvailabilityTool = {
+  type: 'function' as const,
+  function: {
+    name: 'calendar_check_availability',
+    description: 'Verifica os horários ocupados em um dia específico. Use para encontrar horários livres antes de agendar.',
+    parameters: {
+      type: 'object',
+      properties: {
+        date: {
+          type: 'string',
+          description: 'Data para verificar no formato YYYY-MM-DD (ex: "2025-01-15")'
+        }
+      },
+      required: ['date']
+    }
+  }
+};
+
 export async function generateResponse(
   agent: AgentWithConfig, 
   userMessage: string, 
@@ -748,6 +888,38 @@ Inclua também a mensagem atual do cliente no conversation_history.
     if (agent.notification_number) {
       availableTools.push(notifyHumanTool);
       availableTools.push(collectInfoTool);
+    }
+    
+    // Add calendar tools if enabled for this agent
+    const calendarEnabled = await isCalendarEnabled(agent.id);
+    if (calendarEnabled) {
+      availableTools.push(listEventsTool);
+      availableTools.push(createEventTool);
+      availableTools.push(updateEventTool);
+      availableTools.push(deleteEventTool);
+      availableTools.push(checkAvailabilityTool);
+      
+      // Add calendar context to system prompt
+      systemPrompt += `\n\n## 📅 Integração com Google Calendar:
+Você tem acesso ao calendário do agente. Use as ferramentas de calendário para:
+
+### Ferramentas disponíveis:
+1. **calendar_list_events** - Lista os próximos compromissos. Use para mostrar a agenda ou verificar horários.
+2. **calendar_create_event** - Cria um novo evento/compromisso. Pergunte: título, data, horário início/fim.
+3. **calendar_update_event** - Altera um evento existente (remarcar, mudar título, etc.).
+4. **calendar_delete_event** - Cancela/exclui um evento.
+5. **calendar_check_availability** - Verifica horários ocupados em um dia específico.
+
+### Fluxo recomendado para agendamentos:
+1. Pergunte qual serviço/tipo de compromisso
+2. Use calendar_check_availability para ver horários ocupados
+3. Sugira horários livres ao cliente
+4. Após confirmação, use calendar_create_event
+5. Confirme o agendamento ao cliente
+
+### Formatos de data/hora:
+- Data: YYYY-MM-DD (ex: 2025-01-15)
+- Hora: HH:MM (ex: 14:30)`;
     }
 
 
@@ -1319,6 +1491,174 @@ Inclua também a mensagem atual do cliente no conversation_history.
           } catch (e) {
             console.error('Error parsing confirm_order tool call:', e);
             await createLog(agent.id, 'error', 'Erro ao processar confirm_order', { error: String(e) }, phoneNumber, 'whatsapp');
+          }
+        }
+
+        // Handle calendar_list_events tool call
+        if (toolCall.function.name === 'calendar_list_events') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const daysAhead = args.days_ahead || 7;
+            const maxResults = args.max_results || 10;
+
+            console.log('=== calendar_list_events Tool Call ===');
+
+            const timeMin = new Date().toISOString();
+            const timeMax = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000).toISOString();
+            
+            const result = await listCalendarEvents(agent.id, timeMin, timeMax, maxResults);
+
+            if (result.success && result.events) {
+              if (result.events.length === 0) {
+                toolSuggestedMessage = `📅 Não há compromissos agendados nos próximos ${daysAhead} dias.`;
+              } else {
+                let eventsList = `📅 *Próximos compromissos:*\n\n`;
+                for (const event of result.events) {
+                  const start = event.start?.dateTime || event.start?.date;
+                  const startDate = start ? new Date(start) : null;
+                  const dateStr = startDate ? startDate.toLocaleDateString('pt-BR', { 
+                    weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' 
+                  }) : 'Data não definida';
+                  eventsList += `• *${event.summary}*\n  📆 ${dateStr}\n  🔑 ID: ${event.id}\n\n`;
+                }
+                toolSuggestedMessage = eventsList;
+              }
+
+              await createLog(agent.id, 'tool_call', `Tool: calendar_list_events - ${result.events.length} eventos`, 
+                { eventsCount: result.events.length, daysAhead }, phoneNumber, 'whatsapp');
+            } else {
+              toolSuggestedMessage = `❌ ${result.error || 'Erro ao buscar eventos do calendário.'}`;
+            }
+          } catch (e) {
+            console.error('Error parsing calendar_list_events tool call:', e);
+            await createLog(agent.id, 'error', 'Erro ao processar calendar_list_events', { error: String(e) }, phoneNumber, 'whatsapp');
+          }
+        }
+
+        // Handle calendar_create_event tool call
+        if (toolCall.function.name === 'calendar_create_event') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const title = args.title;
+            const date = args.date;
+            const startTime = args.start_time;
+            const endTime = args.end_time;
+            const description = args.description;
+
+            console.log('=== calendar_create_event Tool Call ===');
+
+            const startDateTime = `${date}T${startTime}:00-03:00`;
+            const endDateTime = `${date}T${endTime}:00-03:00`;
+
+            const result = await createCalendarEvent(agent.id, title, startDateTime, endDateTime, description);
+
+            if (result.success && result.event) {
+              const startDate = new Date(startDateTime);
+              const dateStr = startDate.toLocaleDateString('pt-BR', { 
+                weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' 
+              });
+              toolSuggestedMessage = `✅ *Compromisso agendado com sucesso!*\n\n📌 *${title}*\n📆 ${dateStr}\n⏰ ${startTime} às ${endTime}${description ? `\n📝 ${description}` : ''}\n\n🔑 ID: ${result.event.id}`;
+
+              await createLog(agent.id, 'tool_call', `Tool: calendar_create_event - ${title}`, 
+                { title, date, startTime, endTime, eventId: result.event.id }, phoneNumber, 'whatsapp');
+            } else {
+              toolSuggestedMessage = `❌ ${result.error || 'Erro ao criar evento no calendário.'}`;
+            }
+          } catch (e) {
+            console.error('Error parsing calendar_create_event tool call:', e);
+            await createLog(agent.id, 'error', 'Erro ao processar calendar_create_event', { error: String(e) }, phoneNumber, 'whatsapp');
+          }
+        }
+
+        // Handle calendar_update_event tool call
+        if (toolCall.function.name === 'calendar_update_event') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const eventId = args.event_id;
+            const updates: any = {};
+            
+            if (args.title) updates.summary = args.title;
+            if (args.description) updates.description = args.description;
+            if (args.date && args.start_time) updates.startDateTime = `${args.date}T${args.start_time}:00-03:00`;
+            if (args.date && args.end_time) updates.endDateTime = `${args.date}T${args.end_time}:00-03:00`;
+
+            console.log('=== calendar_update_event Tool Call ===');
+
+            const result = await updateCalendarEvent(agent.id, eventId, updates);
+
+            if (result.success) {
+              toolSuggestedMessage = `✅ *Compromisso atualizado com sucesso!*\n\n📌 ${result.event?.summary || 'Evento'}`;
+
+              await createLog(agent.id, 'tool_call', `Tool: calendar_update_event - ${eventId}`, 
+                { eventId, updates }, phoneNumber, 'whatsapp');
+            } else {
+              toolSuggestedMessage = `❌ ${result.error || 'Erro ao atualizar evento.'}`;
+            }
+          } catch (e) {
+            console.error('Error parsing calendar_update_event tool call:', e);
+            await createLog(agent.id, 'error', 'Erro ao processar calendar_update_event', { error: String(e) }, phoneNumber, 'whatsapp');
+          }
+        }
+
+        // Handle calendar_delete_event tool call
+        if (toolCall.function.name === 'calendar_delete_event') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const eventId = args.event_id;
+
+            console.log('=== calendar_delete_event Tool Call ===');
+
+            const result = await deleteCalendarEvent(agent.id, eventId);
+
+            if (result.success) {
+              toolSuggestedMessage = `✅ *Compromisso cancelado/excluído com sucesso!*`;
+
+              await createLog(agent.id, 'tool_call', `Tool: calendar_delete_event - ${eventId}`, 
+                { eventId }, phoneNumber, 'whatsapp');
+            } else {
+              toolSuggestedMessage = `❌ ${result.error || 'Erro ao excluir evento.'}`;
+            }
+          } catch (e) {
+            console.error('Error parsing calendar_delete_event tool call:', e);
+            await createLog(agent.id, 'error', 'Erro ao processar calendar_delete_event', { error: String(e) }, phoneNumber, 'whatsapp');
+          }
+        }
+
+        // Handle calendar_check_availability tool call
+        if (toolCall.function.name === 'calendar_check_availability') {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const date = args.date;
+
+            console.log('=== calendar_check_availability Tool Call ===');
+
+            const result = await checkCalendarAvailability(agent.id, date);
+
+            if (result.success) {
+              const dateObj = new Date(date + 'T12:00:00');
+              const dateStr = dateObj.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
+
+              if (!result.busySlots || result.busySlots.length === 0) {
+                toolSuggestedMessage = `📅 *${dateStr}*\n\n✅ Dia totalmente livre! Qual horário você prefere?`;
+              } else {
+                let busyList = `📅 *${dateStr}*\n\n⚠️ *Horários ocupados:*\n`;
+                for (const slot of result.busySlots) {
+                  const startTime = slot.start ? new Date(slot.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+                  const endTime = slot.end ? new Date(slot.end).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+                  busyList += `• ${startTime} - ${endTime}\n`;
+                }
+                busyList += `\nOs demais horários estão disponíveis. Qual você prefere?`;
+                toolSuggestedMessage = busyList;
+              }
+
+              await createLog(agent.id, 'tool_call', `Tool: calendar_check_availability - ${date}`, 
+                { date, busySlotsCount: result.busySlots?.length || 0 }, phoneNumber, 'whatsapp');
+            } else {
+              toolSuggestedMessage = `❌ ${result.error || 'Erro ao verificar disponibilidade.'}`;
+            }
+          } catch (e) {
+            console.error('Error parsing calendar_check_availability tool call:', e);
+            await createLog(agent.id, 'error', 'Erro ao processar calendar_check_availability', { error: String(e) }, phoneNumber, 'whatsapp');
           }
         }
       }
