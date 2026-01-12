@@ -72,7 +72,10 @@ agentsRouter.put('/:id', async (req, res) => {
     } = req.body;
     
     // Helper to convert undefined to null for proper COALESCE behavior
-    const toNull = (val: any) => val === undefined ? null : val;
+    // Also handles empty strings for optional text fields that should be nullable
+    const toNull = (val: any) => (val === undefined || val === '') ? null : val;
+    // For required fields like name/description/prompt, keep empty strings as-is to allow explicit updates
+    const toNullStrict = (val: any) => val === undefined ? null : val;
     
     const result = await query(
       `UPDATE agents 
@@ -119,7 +122,7 @@ agentsRouter.put('/:id', async (req, res) => {
        WHERE id = $40
        RETURNING *`,
       [
-        toNull(name), toNull(description), toNull(prompt), toNull(instanceName), 
+        toNullStrict(name), toNullStrict(description), toNullStrict(prompt), toNull(instanceName), 
         toNull(webhookUrl), toNull(token), toNull(status), toNull(audioEnabled), 
         toNull(imageEnabled), toNull(documentEnabled), toNull(widgetEnabled), 
         toNull(ghostMode), toNull(takeoverTimeout), toNull(inactivityEnabled), 
